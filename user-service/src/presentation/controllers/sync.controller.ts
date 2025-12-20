@@ -50,6 +50,18 @@ class SyncStatusResponseDto {
 
   @ApiProperty({ description: 'Duração em milissegundos', nullable: true })
   durationMs: number | null;
+
+  @ApiProperty({ description: 'Duração formatada', example: '2m 30s' })
+  durationFormatted: string | null;
+
+  @ApiProperty({ description: 'Registros por segundo', example: 625.5 })
+  recordsPerSecond: number | null;
+
+  @ApiProperty({ description: 'Tempo estimado restante', example: '5m 20s' })
+  estimatedTimeRemaining: string | null;
+
+  @ApiProperty({ description: 'Percentual de progresso (estimado)', example: 75.5 })
+  progressPercent: number | null;
 }
 
 @Controller('sync')
@@ -81,8 +93,66 @@ export class SyncController {
     status: HttpStatus.OK,
     description: 'Nenhuma sincronização encontrada',
   })
-  async getStatus(): Promise<SyncLog | null> {
-    return this.syncService.getLatestSync();
+  async getStatus(): Promise<SyncStatusResponseDto | null> {
+    const syncLog = await this.syncService.getLatestSync();
+    if (!syncLog) return null;
+
+    const now = Date.now();
+    const startTime = new Date(syncLog.startedAt).getTime();
+    const elapsedMs = syncLog.durationMs ?? (now - startTime);
+    const elapsedSeconds = elapsedMs / 1000;
+
+    const recordsPerSecond =
+      elapsedSeconds > 0
+        ? Math.round((syncLog.totalProcessed / elapsedSeconds) * 10) / 10
+        : null;
+
+    // Estima 1M de registros como total (baseado no conhecimento do sistema)
+    const estimatedTotal = 1_000_000;
+    const progressPercent =
+      syncLog.status === SyncStatus.COMPLETED
+        ? 100
+        : Math.min(
+            Math.round((syncLog.totalProcessed / estimatedTotal) * 1000) / 10,
+            99.9,
+          );
+
+    let estimatedTimeRemaining: string | null = null;
+    if (
+      recordsPerSecond &&
+      recordsPerSecond > 0 &&
+      syncLog.status !== SyncStatus.COMPLETED &&
+      syncLog.status !== SyncStatus.FAILED
+    ) {
+      const remaining = estimatedTotal - syncLog.totalProcessed;
+      const secondsRemaining = remaining / recordsPerSecond;
+      estimatedTimeRemaining = this.formatDuration(secondsRemaining * 1000);
+    }
+
+    return {
+      id: syncLog.id,
+      status: syncLog.status,
+      startedAt: syncLog.startedAt,
+      finishedAt: syncLog.finishedAt,
+      totalProcessed: syncLog.totalProcessed,
+      errorMessage: syncLog.errorMessage,
+      durationMs: syncLog.durationMs ?? elapsedMs,
+      durationFormatted: this.formatDuration(elapsedMs),
+      recordsPerSecond,
+      estimatedTimeRemaining,
+      progressPercent,
+    };
+  }
+
+  private formatDuration(ms: number): string {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+
+    if (minutes === 0) {
+      return `${seconds}s`;
+    }
+    return `${minutes}m ${seconds}s`;
   }
 
   @Get('history')
