@@ -8,6 +8,57 @@
 
 Serviço de integração que sincroniza dados de um sistema legado instável, mantém base própria e disponibiliza endpoints REST.
 
+### Sistema Legado (legacy-api/)
+
+- **Endpoint**: `GET /external/users`
+- **Autenticação**: Header `x-api-key: test-api-key-2024`
+- **Porta**: 3001
+- **Formato**: Streaming em lotes de 100 registros (arrays JSON concatenados)
+
+**Estrutura dos dados do legado:**
+```json
+{
+  "id": 1,
+  "userName": "john_doe",
+  "email": "john@example.com",
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "deleted": false
+}
+```
+
+**Comportamentos instáveis simulados:**
+| Problema | Probabilidade |
+|----------|---------------|
+| Erro 500 | 20% |
+| Erro 429 (rate limit) | 20% |
+| JSON Corrompido | 20% |
+| Duplicatas | Frequente |
+| Soft Delete | Retorna `deleted: true` |
+
+### Endpoints Obrigatórios
+
+**Sincronização:**
+- `POST /sync` - Dispara sincronização (enfileira job)
+
+**Consulta:**
+- `GET /users` - Lista com paginação
+- `GET /users/:user_name` - Busca por user_name
+
+**CRUD:**
+- `POST /users` - Cadastra novo
+- `PUT /users/:id` - Atualiza
+- `DELETE /users/:id` - Soft-delete
+
+**Exportação:**
+- `GET /users/export/csv` - Exporta com filtros `created_from`, `created_to`
+
+### Regras de Negócio
+
+1. **Soft Delete**: Todos endpoints retornam apenas `deleted = false`
+2. **Unicidade**: `user_name` deve ser único
+3. **Deduplicação**: Em duplicatas, manter registro com `createdAt` mais recente
+4. **Idempotência**: Múltiplas syncs não causam inconsistências
+
 ### Stack Tecnológica
 
 | Camada | Tecnologia |
@@ -115,3 +166,46 @@ feat(sync): implement streaming parser for legacy API
 fix(users): handle duplicate userName constraint
 docs(readme): add installation instructions
 ```
+
+---
+
+## Como Rodar
+
+### Desenvolvimento Local (Recomendado)
+```bash
+# Terminal 1 - Redis
+docker run -d --name redis-local -p 6379:6379 redis:7-alpine
+
+# Terminal 2 - Legacy API
+cd ../legacy-api/api && npm install && npm run dev
+
+# Terminal 3 - User Service
+cd user-service && npm install && npm run start:dev
+```
+
+### Com Docker Compose
+```bash
+docker-compose up --build
+```
+
+### URLs
+- API: http://localhost:3000
+- Swagger: http://localhost:3000/api/docs
+- Legacy API: http://localhost:3001
+
+---
+
+## Entregáveis
+
+### Obrigatórios
+- [ ] Código-fonte em repositório Git
+- [ ] `README.md` com instruções
+- [ ] `Dockerfile` funcional (limite 128MB)
+- [ ] `docs/AWS_ARCHITECTURE.md`
+
+### Diferenciais
+- [ ] Testes unitários e de integração
+- [ ] Documentação Swagger/OpenAPI
+- [ ] Rate limiting
+- [ ] Health check endpoint
+- [ ] `docs/OPTIMIZATIONS.md`

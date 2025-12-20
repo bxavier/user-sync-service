@@ -4,7 +4,7 @@
 
 | Fase | Status | Descrição |
 |------|--------|-----------|
-| 1 | Em andamento | Setup do Projeto |
+| 1 | Concluído | Setup do Projeto |
 | 2 | Pendente | Domínio e Persistência |
 | 3 | Pendente | CRUD de Usuários |
 | 4 | Pendente | Cliente do Sistema Legado |
@@ -16,7 +16,7 @@
 ---
 
 ## Fase 1: Setup do Projeto
-**Status**: Em andamento
+**Status**: Concluído
 
 ### Tarefas
 - [x] Inicializar projeto NestJS com Fastify
