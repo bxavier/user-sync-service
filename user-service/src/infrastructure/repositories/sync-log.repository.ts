@@ -54,9 +54,11 @@ export class SyncLogRepositoryImpl implements SyncLogRepository {
   }
 
   async findLatest(): Promise<SyncLog | null> {
-    return this.repository.findOne({
+    const results = await this.repository.find({
       order: { startedAt: 'DESC' },
+      take: 1,
     });
+    return results[0] ?? null;
   }
 
   async findAll(limit = 10): Promise<SyncLog[]> {
