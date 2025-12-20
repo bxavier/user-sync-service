@@ -129,6 +129,7 @@ src/
 - **DRY** - extrair lógica repetida
 - **KISS** - simplicidade sobre complexidade
 - **YAGNI** - não implementar o que não é necessário
+- **ZERO OVERENGINEERING** - implementar apenas o necessário para o requisito
 
 ---
 
@@ -143,6 +144,27 @@ Isso garante alinhamento e permite que o usuário entenda e valide cada decisão
 
 ---
 
+## Estilo de Documentação
+
+Ao explicar conceitos ou implementações:
+- **Um passo de cada vez**: Implementar e explicar cada componente individualmente
+- **Simples e direto**: Explicar para desenvolvedores, sem simplificações excessivas
+- **Motivo antes do código**: Sempre dizer o "porquê" antes do "como"
+
+### Formato preferido:
+
+```
+## [Nome do componente]
+
+**O que faz**: [descrição técnica em 1 frase]
+
+**Por que**: [justificativa técnica]
+
+**Código**: [implementação]
+```
+
+---
+
 ## Alertas Importantes
 
 ### NÃO FAZER
@@ -150,6 +172,7 @@ Isso garante alinhamento e permite que o usuário entenda e valide cada decisão
 - Criar abstrações desnecessárias
 - Ignorar erros silenciosamente
 - Commits sem padrão conventional
+- **OVERENGINEERING** - sempre verificar se o requisito exige antes de implementar
 
 ### SEMPRE FAZER
 - Tipar tudo explicitamente
