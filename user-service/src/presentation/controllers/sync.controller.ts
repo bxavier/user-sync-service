@@ -7,6 +7,7 @@ import {
 } from '@nestjs/swagger';
 import { SyncService, TriggerSyncResult } from '../../application/services/sync.service';
 import { SyncLog, SyncStatus } from '../../domain/entities';
+import { BATCH_SIZE, WORKER_CONCURRENCY } from '../../infrastructure/queue/sync.constants';
 
 class SyncTriggerResponseDto implements TriggerSyncResult {
   @ApiProperty({ description: 'ID do log de sincronização', example: 1 })
@@ -62,6 +63,12 @@ class SyncStatusResponseDto {
 
   @ApiProperty({ description: 'Percentual de progresso (estimado)', example: 75.5 })
   progressPercent: number | null;
+
+  @ApiProperty({ description: 'Tamanho do batch', example: 100 })
+  batchSize: number;
+
+  @ApiProperty({ description: 'Número de workers', example: 50 })
+  workerConcurrency: number;
 }
 
 @Controller('sync')
@@ -141,6 +148,8 @@ export class SyncController {
       recordsPerSecond,
       estimatedTimeRemaining,
       progressPercent,
+      batchSize: BATCH_SIZE,
+      workerConcurrency: WORKER_CONCURRENCY,
     };
   }
 

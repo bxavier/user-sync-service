@@ -15,13 +15,13 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
 │  Legacy API     │◀───streaming──────────────│ LegacyApiClient │
 │  (Port 3001)    │                            │ (axios stream)  │
 └─────────────────┘                            └────────┬────────┘
-                                                        │ batch (1000 users)
+                                                        │ batch (2000 users)
                                                         ▼
                                                ┌─────────────────┐
                                                │ Batch Queue     │
                                                │(user-sync-batch)│
                                                └────────┬────────┘
-                                                        │ parallel (5x)
+                                                        │ parallel (20x)
                                                         ▼
                                                ┌─────────────────┐
                                                │SyncBatchProcessor│
@@ -71,7 +71,7 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
 - **Queue** (✅ implementado):
   - `sync.constants.ts` - constantes (`SYNC_QUEUE_NAME`, `SYNC_BATCH_QUEUE_NAME`, `BATCH_SIZE`)
   - `SyncProcessor` - orquestrador que recebe streaming e enfileira batches
-  - `SyncBatchProcessor` - worker paralelo (concurrency: 5) que processa batches
+  - `SyncBatchProcessor` - worker paralelo (concurrency: 20) que processa batches de 2000 usuários
 - **Logger**: LoggerService customizado (✅ estende ConsoleLogger)
 
 ### Presentation Layer (✅ implementado)
@@ -122,7 +122,7 @@ const circuitBreakerConfig = {
                                                           │(user-sync-   │
                                                           │    batch)    │
                                                           └──────┬───────┘
-                                                                  │ parallel (5x)
+                                                                  │ parallel (20x)
                                                                   ▼
                                                           ┌──────────────┐
                                                           │SyncBatch     │
@@ -141,11 +141,11 @@ const circuitBreakerConfig = {
 3. Cria SyncLog com status PENDING e enfileira job no BullMQ (`user-sync`)
 4. SyncProcessor consome job, atualiza status para RUNNING
 5. LegacyApiClient faz streaming real com axios (`responseType: 'stream'`)
-6. A cada 1000 usuários, enfileira um job na fila `user-sync-batch`
+6. A cada 2000 usuários, enfileira um job na fila `user-sync-batch`
 7. Quando streaming termina, atualiza SyncLog para status PROCESSING
-8. SyncBatchProcessor processa batches em paralelo (concurrency: 5)
-9. Cada batch usa `bulkUpsertByUserName` (deduplicação por userName)
-10. Performance: 1M usuários em ~27 minutos
+8. SyncBatchProcessor processa batches em paralelo (concurrency: 20)
+9. Cada batch usa `bulkUpsertByUserName` com transação explícita (deduplicação por userName)
+10. Performance: 1M usuários em ~18 minutos (~820 rec/s)
 
 ## Decisões Técnicas
 
@@ -156,5 +156,6 @@ const circuitBreakerConfig = {
 | Fastify | Performance superior ao Express |
 | TypeORM | Abstrações DDD, suporte a SQLite |
 | Streaming + Batch Queue | Suporte a 1M+ registros sem esgotar memória |
-| Parallel Workers (5x) | Processamento distribuído para alta performance |
+| Parallel Workers (20x) | Processamento distribuído para alta performance |
+| Transação Explícita | Reduz I/O de disco no SQLite (fsync único por batch) |
 | Bulk Upsert | Operações em lote para reduzir I/O de banco |

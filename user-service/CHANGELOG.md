@@ -53,13 +53,27 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 #### Fase 5: Sincronização com BullMQ
 - `SyncProcessor` - Orquestrador que recebe streaming e enfileira batches
-- `SyncBatchProcessor` - Worker paralelo (concurrency: 5) que processa batches de 1000 usuários
-- `bulkUpsertByUserName` - Bulk insert/update usando userName como chave única
+- `SyncBatchProcessor` - Worker paralelo (concurrency: 20) que processa batches de 2000 usuários
+- `bulkUpsertByUserName` - Bulk insert/update com transação explícita usando userName como chave única
 - `SyncService` com idempotência (verifica PENDING/RUNNING/PROCESSING)
 - `SyncController` com endpoints POST /sync, GET /sync/status, GET /sync/history
 - Cron job para sincronização periódica (a cada 5 minutos)
 - Status `PROCESSING` no enum `SyncStatus` para rastrear fase de batch processing
-- Performance: 1M usuários sincronizados em ~27 minutos
+- Performance: 1M usuários sincronizados em ~18 minutos (~820 rec/s)
+
+#### Fase 6: Melhorias no Endpoint de Status e Otimizações
+- `GET /sync/status` agora retorna métricas detalhadas:
+  - `durationFormatted` - Duração em formato legível (ex: "2m 30s")
+  - `recordsPerSecond` - Taxa de processamento
+  - `estimatedTimeRemaining` - Tempo estimado restante
+  - `progressPercent` - Percentual de progresso
+  - `batchSize` - Tamanho do batch configurado
+  - `workerConcurrency` - Número de workers paralelos
+- Otimizações de performance testadas:
+  - BATCH_SIZE aumentado de 1000 para 2000
+  - WORKER_CONCURRENCY aumentado de 5 para 20
+  - Transação explícita no bulkUpsert para reduzir I/O de disco
+  - Resultado: ~33% mais rápido (de ~27min para ~18min)
 
 ### Fixed
 - Corrigido erro de compilação em `LegacyApiClient` (propriedade inexistente no CircuitBreakerConfig)
