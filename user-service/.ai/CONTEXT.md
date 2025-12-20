@@ -51,14 +51,17 @@ Leia os seguintes arquivos de contexto antes de continuar o desenvolvimento:
 
 **Fase 5 (Sincronização com BullMQ)**: Concluída
 
-- [x] Configurar BullMQ Queue (`SYNC_QUEUE_NAME`)
-- [x] Criar `SyncProcessor` (worker)
-- [x] Lógica de deduplicação por `legacyId` (via `upsertByLegacyId`)
-- [x] Histórico/log de execuções (SyncLog)
+- [x] Configurar BullMQ Queue (`SYNC_QUEUE_NAME`, `SYNC_BATCH_QUEUE_NAME`)
+- [x] Criar `SyncProcessor` (orquestrador - recebe streaming e enfileira batches)
+- [x] Criar `SyncBatchProcessor` (worker - processa batches em paralelo, concurrency: 5)
+- [x] Lógica de deduplicação por `userName` (via `bulkUpsertByUserName`)
+- [x] Histórico/log de execuções (SyncLog com status PROCESSING)
 - [x] Endpoint `POST /sync`
 - [x] Endpoints `GET /sync/status` e `GET /sync/history`
 - [x] Cron job para sync periódico (a cada 5 minutos)
-- [x] Garantir idempotência (verifica se já existe sync PENDING/RUNNING)
+- [x] Garantir idempotência (verifica se já existe sync PENDING/RUNNING/PROCESSING)
+- [x] Streaming real com axios (`responseType: 'stream'`)
+- [x] Batch processing (1000 usuários por job) para suportar 1M+ registros (~27 min)
 
 ## Tarefas Pendentes (Fase 6 - Exportação CSV)
 
@@ -118,8 +121,9 @@ user-service/
 │   │   │   └── circuit-breaker.ts       # ✅ CircuitBreaker
 │   │   └── queue/                       # BullMQ
 │   │       ├── index.ts                 # Barrel exports
-│   │       ├── sync.constants.ts        # ✅ SYNC_QUEUE_NAME, SYNC_JOB_NAME
-│   │       └── sync.processor.ts        # ✅ SyncProcessor (worker)
+│   │       ├── sync.constants.ts        # ✅ SYNC_QUEUE_NAME, SYNC_BATCH_QUEUE_NAME, BATCH_SIZE
+│   │       ├── sync.processor.ts        # ✅ SyncProcessor (orquestrador)
+│   │       └── sync-batch.processor.ts  # ✅ SyncBatchProcessor (worker paralelo)
 │   └── presentation/
 │       ├── controllers/
 │       │   ├── index.ts

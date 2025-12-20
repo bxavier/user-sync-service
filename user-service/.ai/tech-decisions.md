@@ -147,3 +147,73 @@ infrastructure/
     ├── custom-logger.service.ts  # LoggerService
     └── index.ts                   # Barrel export
 ```
+
+---
+
+## TDR-007: Processamento Distribuído com BullMQ Batch Queue
+
+**Data**: 2024-12-20
+**Status**: Aprovado
+
+### Contexto
+A API legada retorna 1 milhão de usuários via streaming. Processar um por um é lento (~1000/min).
+
+### Decisão
+Implementar arquitetura de filas distribuídas com streaming + batch processing.
+
+### Arquitetura
+```
+LegacyAPI → Streaming → SyncProcessor (orquestrador)
+                              ↓
+                        Batch Queue (1000 users/job)
+                              ↓
+                    SyncBatchProcessor (5 workers paralelos)
+                              ↓
+                        bulkUpsertByUserName
+```
+
+### Justificativa
+- **Streaming real**: `axios` com `responseType: 'stream'` evita carregar 1M registros em memória
+- **Batch processing**: Agrupa 1000 usuários por job, reduz overhead de filas
+- **Paralelismo**: 5 workers processam simultaneamente
+- **Bulk upsert**: Uma query para N registros (vs N queries)
+
+### Resultados
+- Antes: horas para 1M usuários
+- Depois: ~27 minutos para 1M usuários
+
+### Configuração
+```typescript
+const BATCH_SIZE = 1000;
+
+@Processor(SYNC_BATCH_QUEUE_NAME, {
+  concurrency: 5, // 5 workers paralelos
+})
+export class SyncBatchProcessor { }
+```
+
+---
+
+## TDR-008: Deduplicação por userName
+
+**Data**: 2024-12-20
+**Status**: Aprovado
+
+### Contexto
+A regra de negócio exige unicidade por `userName`, não por `legacyId`.
+
+### Decisão
+Usar `userName` como chave de conflito no upsert.
+
+### Implementação
+```typescript
+await this.repository.upsert(entities, {
+  conflictPaths: ['userName'],
+  skipUpdateIfNoValuesChanged: true,
+});
+```
+
+### Justificativa
+- Respeita a regra de negócio (unicidade por userName)
+- Permite que usuários do legado sejam "mesclados" por userName
+- Mantém `legacyId` apenas como referência de origem

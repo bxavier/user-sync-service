@@ -45,12 +45,22 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - `HttpExceptionFilter` global com logging
 - Documentação Swagger via decorators
 
-#### Fase 4: Cliente do Sistema Legado (em progresso)
-- `LegacyApiClient` com axios para consumir API legada
-- `StreamParser` para processar JSON concatenado (arrays de 100 registros)
+#### Fase 4: Cliente do Sistema Legado
+- `LegacyApiClient` com axios para consumir API legada (streaming real com `responseType: 'stream'`)
 - `withRetry` - Retry com exponential backoff
 - `CircuitBreaker` - Circuit breaker para proteção contra falhas cascata
 - Interface `LegacyUser` para tipagem dos dados do sistema legado
 
+#### Fase 5: Sincronização com BullMQ
+- `SyncProcessor` - Orquestrador que recebe streaming e enfileira batches
+- `SyncBatchProcessor` - Worker paralelo (concurrency: 5) que processa batches de 1000 usuários
+- `bulkUpsertByUserName` - Bulk insert/update usando userName como chave única
+- `SyncService` com idempotência (verifica PENDING/RUNNING/PROCESSING)
+- `SyncController` com endpoints POST /sync, GET /sync/status, GET /sync/history
+- Cron job para sincronização periódica (a cada 5 minutos)
+- Status `PROCESSING` no enum `SyncStatus` para rastrear fase de batch processing
+- Performance: 1M usuários sincronizados em ~27 minutos
+
 ### Fixed
 - Corrigido erro de compilação em `LegacyApiClient` (propriedade inexistente no CircuitBreakerConfig)
+- Corrigido método `findLatest` no `SyncLogRepository` (usar find com take:1 em vez de findOne)

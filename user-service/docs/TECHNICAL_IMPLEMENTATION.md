@@ -270,66 +270,77 @@ src/infrastructure/
 
 ## Fase 5: Sincronização Automática
 
-**Status**: Em progresso
+**Status**: Concluído
 
-### O que vamos implementar
+### O que foi implementado
 
-Agora que temos o cliente da API legada funcionando, precisamos criar o fluxo completo de sincronização.
+A sincronização usa uma arquitetura distribuída para processar 1 milhão de usuários em ~27 minutos.
 
-**1. Queue de sincronização**
+**1. Arquitetura de Filas**
 
-Vamos registrar uma fila BullMQ chamada `sync-users`. Quando alguém chamar `POST /sync`, um job é adicionado nessa fila.
+Duas filas BullMQ:
+- `user-sync`: Recebe o job principal (orquestrador)
+- `user-sync-batch`: Recebe jobs de batch (1000 usuários cada)
 
-**2. SyncProcessor (Worker)**
+**2. SyncProcessor (Orquestrador)**
 
-O worker é quem processa os jobs da fila. O fluxo será:
+Recebe streaming da API legada e enfileira batches:
 
 ```
-1. Recebe job da fila
-2. Cria registro no SyncLog (status: RUNNING)
-3. Chama LegacyApiClient.fetchUsers()
-4. Pra cada usuário retornado:
-   - Chama UserRepository.upsertByLegacyId()
-5. Atualiza SyncLog (status: COMPLETED ou FAILED)
+1. Recebe job da fila user-sync
+2. Atualiza SyncLog para RUNNING
+3. Inicia streaming com LegacyApiClient.fetchUsersStreaming()
+4. A cada 1000 usuários, enfileira job na fila user-sync-batch
+5. Quando streaming termina, atualiza SyncLog para PROCESSING
 ```
 
-**3. SyncService**
+**3. SyncBatchProcessor (Workers)**
+
+Processa batches em paralelo (concurrency: 5):
+
+```
+1. Recebe job com 1000 usuários
+2. Executa bulkUpsertByUserName (uma query para todos)
+3. Retorna resultado
+```
+
+**4. SyncService**
 
 Serviço com a lógica de negócio:
-- `triggerSync()`: Enfileira um job de sync
-- `getSyncStatus(id)`: Consulta status de uma sync
-- `getSyncHistory()`: Lista últimas execuções
+- `triggerSync()`: Verifica idempotência e enfileira job
+- `getLatestSync()`: Retorna última sincronização
+- `getSyncHistory()`: Lista histórico
+- `handleScheduledSync()`: Cron job a cada 5 minutos
 
-Uma regra importante: se já tem uma sync rodando, não deixa disparar outra.
-
-**4. SyncController**
+**5. SyncController**
 
 Endpoints:
 
 | Método | Rota | O que faz |
 |--------|------|-----------|
 | POST | `/sync` | Dispara sincronização |
-| GET | `/sync/:id` | Consulta status |
+| GET | `/sync/status` | Status da última sync |
 | GET | `/sync/history` | Lista histórico |
 
-### Garantias que vamos ter
+### Garantias implementadas
 
-- **Idempotência**: Rodar sync várias vezes não duplica dados
-- **Rastreabilidade**: Toda execução fica registrada no SyncLog
-- **Resiliência**: Se falhar, o SyncLog mostra o erro
+- **Idempotência**: Verifica PENDING/RUNNING/PROCESSING antes de criar novo job
+- **Deduplicação**: `bulkUpsertByUserName` usa userName como chave única
+- **Rastreabilidade**: SyncLog com status PENDING → RUNNING → PROCESSING → COMPLETED/FAILED
+- **Performance**: 1M usuários em ~27 minutos (streaming + batch + parallel workers)
 
-### Arquivos que serão criados
+### Arquivos criados
 
 ```
 src/
 ├── infrastructure/
 │   └── queue/
-│       ├── sync.constants.ts    # Nome da fila
-│       ├── sync.processor.ts    # Worker
+│       ├── sync.constants.ts        # SYNC_QUEUE_NAME, SYNC_BATCH_QUEUE_NAME, BATCH_SIZE
+│       ├── sync.processor.ts        # Orquestrador (streaming + batch queueing)
+│       ├── sync-batch.processor.ts  # Workers paralelos (concurrency: 5)
 │       └── index.ts
 ├── application/
-│   ├── services/sync.service.ts
-│   └── dtos/sync-response.dto.ts
+│   └── services/sync.service.ts     # Idempotência + cron job
 └── presentation/
     └── controllers/sync.controller.ts
 ```

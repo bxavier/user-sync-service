@@ -96,17 +96,20 @@ Consegue consumir stream mesmo com erros simulados
 **Status**: ✅ Concluído
 
 ### Tarefas
-- [x] Configurar BullMQ Queue (`SYNC_QUEUE_NAME`, `BullModule.registerQueue`)
-- [x] Criar `SyncProcessor` (worker com `@Processor`)
-- [x] Lógica de deduplicação por `legacyId` (via `upsertByLegacyId`)
-- [x] Histórico/log de execuções (SyncLog com status PENDING/RUNNING/COMPLETED/FAILED)
+- [x] Configurar BullMQ Queue (`SYNC_QUEUE_NAME`, `SYNC_BATCH_QUEUE_NAME`)
+- [x] Criar `SyncProcessor` (orquestrador que recebe streaming e enfileira batches)
+- [x] Criar `SyncBatchProcessor` (worker paralelo com concurrency: 5)
+- [x] Lógica de deduplicação por `userName` (via `bulkUpsertByUserName`)
+- [x] Histórico/log de execuções (SyncLog com status PENDING/RUNNING/PROCESSING/COMPLETED/FAILED)
 - [x] Endpoint `POST /sync` (retorna 202 Accepted)
 - [x] Endpoints auxiliares `GET /sync/status` e `GET /sync/history`
 - [x] Cron job para sync periódico (a cada 5 minutos via `@Cron`)
-- [x] Garantir idempotência (verifica se já existe sync PENDING/RUNNING antes de enfileirar)
+- [x] Garantir idempotência (verifica se já existe sync PENDING/RUNNING/PROCESSING)
+- [x] Streaming real com axios (`responseType: 'stream'`) e backpressure
+- [x] Batch processing (1000 usuários por job) para suportar 1M+ registros
 
 ### Critério de Conclusão
-Múltiplas syncs não geram duplicatas
+1 milhão de usuários sincronizados em ~27 minutos, sem duplicatas
 
 ---
 

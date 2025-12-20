@@ -6,16 +6,28 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   POST /sync    │────▶│   BullMQ Queue  │────▶│  Sync Processor │
-│   (Controller)  │     │   (Redis)       │     │  (Worker)       │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                        │
-                                                        ▼
+│   POST /sync    │────▶│  Sync Queue     │────▶│ SyncProcessor   │
+│   (Controller)  │     │  (user-sync)    │     │ (Orquestrador)  │
+└─────────────────┘     └─────────────────┘     └────────┬────────┘
+                                                         │ streaming
+                                                         ▼
 ┌─────────────────┐                            ┌─────────────────┐
-│  Legacy API     │◀───────────────────────────│  Legacy Client  │
-│  (Port 3001)    │                            │  (Resiliente)   │
+│  Legacy API     │◀───streaming──────────────│ LegacyApiClient │
+│  (Port 3001)    │                            │ (axios stream)  │
 └─────────────────┘                            └────────┬────────┘
-                                                        │
+                                                        │ batch (1000 users)
+                                                        ▼
+                                               ┌─────────────────┐
+                                               │ Batch Queue     │
+                                               │(user-sync-batch)│
+                                               └────────┬────────┘
+                                                        │ parallel (5x)
+                                                        ▼
+                                               ┌─────────────────┐
+                                               │SyncBatchProcessor│
+                                               │ (Workers)       │
+                                               └────────┬────────┘
+                                                        │ bulkUpsert
                                                         ▼
                                                ┌─────────────────┐
                                                │  SQLite DB      │
@@ -30,7 +42,7 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
   - `User` - usuário sincronizado (com soft delete via `deleted`/`deletedAt`)
   - `SyncLog` - log de execução de sincronização (com enum `SyncStatus`)
 - **Repository Interfaces** (✅ implementado):
-  - `UserRepository` - findAll, findById, findByUserName, create, update, softDelete, upsertByLegacyId
+  - `UserRepository` - findAll, findById, findByUserName, create, update, softDelete, upsertByLegacyId, bulkUpsertByUserName
   - `SyncLogRepository` - create, update, findById, findLatest, findAll
 
 ### Application Layer
@@ -51,15 +63,15 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
   - `SyncLogRepositoryImpl` - implementação com TypeORM
   - `repositories.providers.ts` - providers centralizados para DI
 - **Legacy** (✅ implementado):
-  - `LegacyApiClient` - cliente HTTP com axios para API legada
-  - `StreamParser` - parser para JSON concatenado (arrays de 100 registros)
+  - `LegacyApiClient` - cliente HTTP com axios (streaming real com `responseType: 'stream'`)
   - `LegacyUser` - interface para dados do sistema legado
 - **Resilience** (✅ implementado):
   - `withRetry` - função de retry com exponential backoff
   - `CircuitBreaker` - proteção contra falhas cascata
 - **Queue** (✅ implementado):
-  - `sync.constants.ts` - constantes da fila (`SYNC_QUEUE_NAME`, `SYNC_JOB_NAME`)
-  - `SyncProcessor` - worker BullMQ que processa jobs de sincronização
+  - `sync.constants.ts` - constantes (`SYNC_QUEUE_NAME`, `SYNC_BATCH_QUEUE_NAME`, `BATCH_SIZE`)
+  - `SyncProcessor` - orquestrador que recebe streaming e enfileira batches
+  - `SyncBatchProcessor` - worker paralelo (concurrency: 5) que processa batches
 - **Logger**: LoggerService customizado (✅ estende ConsoleLogger)
 
 ### Presentation Layer (✅ implementado)
@@ -90,35 +102,50 @@ const circuitBreakerConfig = {
 };
 ```
 
-## Fluxo de Sincronização
+## Fluxo de Sincronização (Distribuído)
 
 ```
 ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│ POST /sync   │───▶│ SyncService  │───▶│ BullMQ Queue │───▶│SyncProcessor │
-│ ou Cron Job  │    │ (idempotent) │    │  (Redis)     │    │  (Worker)    │
+│ POST /sync   │───▶│ SyncService  │───▶│ Sync Queue   │───▶│SyncProcessor │
+│ ou Cron Job  │    │ (idempotent) │    │ (user-sync)  │    │(Orquestrador)│
 └──────────────┘    └──────────────┘    └──────────────┘    └──────┬───────┘
-                           │                                       │
+                           │                                       │ streaming
                            ▼                                       ▼
                     ┌──────────────┐                       ┌──────────────┐
-                    │  SyncLog     │◀──────────────────────│LegacyApiClient│
-                    │  (status)    │                       │  (fetch)     │
+                    │  SyncLog     │◀─────status──────────│LegacyApiClient│
+                    │  (PROCESSING)│                       │  (stream)    │
                     └──────────────┘                       └──────┬───────┘
-                                                                  │
+                                                                  │ batch (1000)
+                                                                  ▼
+                                                          ┌──────────────┐
+                                                          │ Batch Queue  │
+                                                          │(user-sync-   │
+                                                          │    batch)    │
+                                                          └──────┬───────┘
+                                                                  │ parallel (5x)
+                                                                  ▼
+                                                          ┌──────────────┐
+                                                          │SyncBatch     │
+                                                          │Processor     │
+                                                          └──────┬───────┘
+                                                                  │ bulkUpsert
                                                                   ▼
                                                           ┌──────────────┐
                                                           │UserRepository│
-                                                          │(upsertByLegacyId)│
+                                                          │(bulkUpsert)  │
                                                           └──────────────┘
 ```
 
 1. `POST /sync` ou Cron Job (a cada 5 min) chama `SyncService.triggerSync()`
-2. SyncService verifica idempotência (se há sync PENDING/RUNNING, retorna existente)
-3. Cria SyncLog com status PENDING e enfileira job no BullMQ
+2. SyncService verifica idempotência (se há sync PENDING/RUNNING/PROCESSING, retorna existente)
+3. Cria SyncLog com status PENDING e enfileira job no BullMQ (`user-sync`)
 4. SyncProcessor consome job, atualiza status para RUNNING
-5. LegacyApiClient busca dados com retry + circuit breaker
-6. StreamParser processa JSON concatenado
-7. Para cada usuário: `upsertByLegacyId` (deduplicação por legacyId, mantém mais recente)
-8. Atualiza SyncLog com status COMPLETED/FAILED, totalProcessed, durationMs
+5. LegacyApiClient faz streaming real com axios (`responseType: 'stream'`)
+6. A cada 1000 usuários, enfileira um job na fila `user-sync-batch`
+7. Quando streaming termina, atualiza SyncLog para status PROCESSING
+8. SyncBatchProcessor processa batches em paralelo (concurrency: 5)
+9. Cada batch usa `bulkUpsertByUserName` (deduplicação por userName)
+10. Performance: 1M usuários em ~27 minutos
 
 ## Decisões Técnicas
 
@@ -128,3 +155,6 @@ const circuitBreakerConfig = {
 | BullMQ | Jobs assíncronos com retry automático |
 | Fastify | Performance superior ao Express |
 | TypeORM | Abstrações DDD, suporte a SQLite |
+| Streaming + Batch Queue | Suporte a 1M+ registros sem esgotar memória |
+| Parallel Workers (5x) | Processamento distribuído para alta performance |
+| Bulk Upsert | Operações em lote para reduzir I/O de banco |
