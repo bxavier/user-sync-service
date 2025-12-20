@@ -49,9 +49,14 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
   - `UserRepositoryImpl` - implementação com TypeORM
   - `SyncLogRepositoryImpl` - implementação com TypeORM
   - `repositories.providers.ts` - providers centralizados para DI
-- **Legacy**: Cliente para API legada + Stream Parser (a implementar)
+- **Legacy** (✅ implementado):
+  - `LegacyApiClient` - cliente HTTP com axios para API legada
+  - `StreamParser` - parser para JSON concatenado (arrays de 100 registros)
+  - `LegacyUser` - interface para dados do sistema legado
+- **Resilience** (✅ implementado):
+  - `withRetry` - função de retry com exponential backoff
+  - `CircuitBreaker` - proteção contra falhas cascata
 - **Queue**: BullMQ para jobs assíncronos (configurado no AppModule)
-- **Resilience**: Retry, Circuit Breaker (a implementar)
 - **Logger**: LoggerService customizado (✅ estende ConsoleLogger)
 
 ### Presentation Layer (✅ implementado)

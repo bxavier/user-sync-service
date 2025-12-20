@@ -16,7 +16,7 @@
 | 1 | ✅ Concluído | Setup do Projeto |
 | 2 | ✅ Concluído | Domínio e Persistência |
 | 3 | ✅ Concluído | CRUD de Usuários |
-| 4 | 🔄 Em Progresso | Cliente do Sistema Legado |
+| 4 | ✅ Concluído | Cliente do Sistema Legado |
 | 5 | Pendente | Sincronização com BullMQ |
 | 6 | Pendente | Exportação CSV |
 | 7 | Pendente | Qualidade e Observabilidade |
@@ -77,15 +77,15 @@ CRUD completo testável via Swagger
 ---
 
 ## Fase 4: Cliente do Sistema Legado
-**Status**: 🔄 Em Progresso
+**Status**: ✅ Concluído
 
 ### Tarefas
-- [ ] `LegacyApiClient` com axios
-- [ ] `StreamParser` para JSON concatenado
-- [ ] Retry com exponential backoff
-- [ ] Circuit breaker simples
-- [ ] Tratamento de JSON corrompido
-- [ ] Logging detalhado
+- [x] `LegacyApiClient` com axios
+- [x] `StreamParser` para JSON concatenado
+- [x] Retry com exponential backoff (`withRetry`)
+- [x] Circuit breaker simples (`CircuitBreaker`)
+- [x] Tratamento de JSON corrompido (via `StreamParser.extractJsonArrays`)
+- [x] Logging detalhado
 
 ### Critério de Conclusão
 Consegue consumir stream mesmo com erros simulados

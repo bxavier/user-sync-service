@@ -14,6 +14,7 @@ Leia os seguintes arquivos de contexto antes de continuar o desenvolvimento:
 ## Status Atual
 
 **Fase 1 (Setup)**: Concluída
+
 - NestJS + Fastify configurado
 - TypeORM + SQLite configurado
 - BullMQ + Redis configurado
@@ -23,6 +24,7 @@ Leia os seguintes arquivos de contexto antes de continuar o desenvolvimento:
 - TypeORM logger integrado ao formato NestJS
 
 **Fase 2 (Domínio e Persistência)**: Concluída
+
 - [x] `User` entity criada (com soft delete via campo `deleted`)
 - [x] `SyncLog` entity criada (com enum `SyncStatus`)
 - [x] Entidades registradas no TypeORM (`TypeOrmModule.forFeature`)
@@ -31,20 +33,31 @@ Leia os seguintes arquivos de contexto antes de continuar o desenvolvimento:
 - [x] Providers centralizados em `repositories.providers.ts`
 
 **Fase 3 (CRUD de Usuários)**: Concluída
+
 - [x] DTOs com validação (CreateUserDto, UpdateUserDto, PaginationDto, UserResponseDto)
 - [x] `UserService` com lógica de negócio
 - [x] `UserController` com endpoints REST
 - [x] `HttpExceptionFilter` global
 - [x] Swagger documentation via decorators
 
-**Fase 4 (Cliente do Sistema Legado)**: Pendente
+**Fase 4 (Cliente do Sistema Legado)**: Concluída
 
-## Tarefas Pendentes (Fase 4)
+- [x] `LegacyApiClient` com axios
+- [x] `StreamParser` para JSON concatenado
+- [x] Retry com exponential backoff (`withRetry`)
+- [x] Circuit breaker simples
+- [x] Tratamento de JSON corrompido (via StreamParser)
+- [x] Logging detalhado
 
-- [ ] `LegacyApiClient` com axios
-- [ ] `StreamParser` para JSON concatenado
-- [ ] Retry com exponential backoff
-- [ ] Circuit breaker simples
+## Tarefas Pendentes (Fase 5 - Sincronização)
+
+- [ ] Configurar BullMQ Queue
+- [ ] Criar `SyncProcessor` (worker)
+- [ ] Lógica de deduplicação por `user_name`
+- [ ] Histórico/log de execuções (SyncLog)
+- [ ] Endpoint `POST /sync`
+- [ ] Cron job para sync periódico
+- [ ] Garantir idempotência
 
 ## Arquivos Principais do Projeto
 
@@ -86,9 +99,16 @@ user-service/
 │   │       ├── user.repository.ts       # ✅ UserRepositoryImpl
 │   │       ├── sync-log.repository.ts   # ✅ SyncLogRepositoryImpl
 │   │       └── repositories.providers.ts # ✅ Providers centralizados
-│   │   ├── legacy/                      # Cliente API legada (a criar)
-│   │   ├── queue/                       # BullMQ (a criar)
-│   │   └── resilience/                  # Retry, Circuit Breaker (a criar)
+│   │   ├── legacy/                      # Cliente API legada
+│   │   │   ├── index.ts                 # Barrel exports
+│   │   │   ├── legacy-api.client.ts     # ✅ LegacyApiClient (axios + retry + circuit breaker)
+│   │   │   ├── legacy-user.interface.ts # ✅ Interface LegacyUser
+│   │   │   └── stream-parser.ts         # ✅ StreamParser para JSON concatenado
+│   │   ├── resilience/                  # Padrões de resiliência
+│   │   │   ├── index.ts                 # Barrel exports
+│   │   │   ├── retry.ts                 # ✅ withRetry (exponential backoff)
+│   │   │   └── circuit-breaker.ts       # ✅ CircuitBreaker
+│   │   └── queue/                       # BullMQ (a criar)
 │   └── presentation/
 │       ├── controllers/
 │       │   ├── index.ts
@@ -116,13 +136,29 @@ npm run start:dev
 ## Fluxo de Desenvolvimento
 
 **IMPORTANTE**: Antes de implementar qualquer código, o assistente DEVE:
+
 1. Explicar o que será implementado e por quê
 2. Descrever a abordagem técnica escolhida
 3. Aguardar aprovação do usuário antes de aplicar as mudanças
 
+## Atualização de Documentação
+
+**OBRIGATÓRIO**: Ao concluir cada tarefa ou fase, o assistente DEVE atualizar:
+
+1. **`.ai/CONTEXT.md`** - Status atual e tarefas pendentes
+2. **`.ai/roadmap.md`** - Marcar tarefas como concluídas
+3. **`.ai/architecture.md`** - Novos componentes implementados
+4. **`.ai/tech-decisions.md`** - Novas decisões técnicas (se houver)
+5. **`docs/TECHNICAL_IMPLEMENTATION.md`** - Detalhes da implementação (linguagem simples e direta)
+6. **`CHANGELOG.md`** - Novas features e correções
+7. **`README.md`** - Instruções de uso (se necessário)
+
+Isso garante que a documentação sempre reflete o estado real do projeto.
+
 ## Commits
 
 Usar conventional commits:
+
 ```
 feat(scope): descrição curta
 
@@ -130,3 +166,16 @@ feat(scope): descrição curta
 
 Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 ```
+
+## Documentação do Projeto
+
+| Arquivo | Propósito |
+|---------|-----------|
+| `.ai/CONTEXT.md` | Ponto de entrada para novos prompts |
+| `.ai/agents.md` | Regras de negócio e padrões de código |
+| `.ai/roadmap.md` | Fases e progresso do desenvolvimento |
+| `.ai/architecture.md` | Arquitetura e componentes |
+| `.ai/tech-decisions.md` | Log de decisões técnicas |
+| `docs/TECHNICAL_IMPLEMENTATION.md` | Como cada parte foi implementada |
+| `CHANGELOG.md` | Histórico de mudanças |
+| `README.md` | Instruções de uso e setup |

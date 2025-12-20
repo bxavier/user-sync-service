@@ -36,7 +36,6 @@ export class LegacyApiClient {
 
     this.circuitBreaker = new CircuitBreaker('legacy-api', {
       failureThreshold: 5,
-      successThreshold: 2,
       timeoutMs: 30000,
     });
 
