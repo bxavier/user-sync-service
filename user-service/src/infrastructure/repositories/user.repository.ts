@@ -118,4 +118,26 @@ export class UserRepositoryImpl implements UserRepository {
 
     return this.repository.save(user);
   }
+
+  async bulkUpsertByUserName(data: UpsertUserData[]): Promise<number> {
+    if (data.length === 0) {
+      return 0;
+    }
+
+    const entities = data.map((item) => ({
+      legacyId: item.legacyId,
+      userName: item.userName,
+      email: item.email,
+      legacyCreatedAt: item.legacyCreatedAt,
+      deleted: item.deleted,
+      deletedAt: item.deleted ? new Date() : null,
+    }));
+
+    await this.repository.upsert(entities, {
+      conflictPaths: ['userName'],
+      skipUpdateIfNoValuesChanged: true,
+    });
+
+    return data.length;
+  }
 }

@@ -9,8 +9,13 @@ import { User, SyncLog } from './domain/entities';
 import { repositoriesProviders } from './infrastructure/repositories';
 import { UserController, SyncController } from './presentation/controllers';
 import { UserService, SyncService } from './application/services';
-import { SYNC_QUEUE_NAME, SyncProcessor } from './infrastructure/queue';
-import { LegacyApiClient, StreamParser } from './infrastructure/legacy';
+import {
+  SYNC_QUEUE_NAME,
+  SYNC_BATCH_QUEUE_NAME,
+  SyncProcessor,
+  SyncBatchProcessor,
+} from './infrastructure/queue';
+import { LegacyApiClient } from './infrastructure/legacy';
 
 @Module({
   imports: [
@@ -26,9 +31,10 @@ import { LegacyApiClient, StreamParser } from './infrastructure/legacy';
         port: parseInt(process.env.REDIS_PORT || '6379', 10),
       },
     }),
-    BullModule.registerQueue({
-      name: SYNC_QUEUE_NAME,
-    }),
+    BullModule.registerQueue(
+      { name: SYNC_QUEUE_NAME },
+      { name: SYNC_BATCH_QUEUE_NAME },
+    ),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
       {
@@ -43,8 +49,8 @@ import { LegacyApiClient, StreamParser } from './infrastructure/legacy';
     UserService,
     SyncService,
     SyncProcessor,
+    SyncBatchProcessor,
     LegacyApiClient,
-    StreamParser,
   ],
 })
 export class AppModule {}

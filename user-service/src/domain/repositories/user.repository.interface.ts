@@ -41,4 +41,5 @@ export interface UserRepository {
   update(id: number, data: UpdateUserData): Promise<User | null>;
   softDelete(id: number): Promise<boolean>;
   upsertByLegacyId(data: UpsertUserData): Promise<User>;
+  bulkUpsertByUserName(data: UpsertUserData[]): Promise<number>;
 }

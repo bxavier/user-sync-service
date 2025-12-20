@@ -8,6 +8,7 @@ import {
 export enum SyncStatus {
   PENDING = 'pending',
   RUNNING = 'running',
+  PROCESSING = 'processing', // Batches enfileirados, aguardando processamento
   COMPLETED = 'completed',
   FAILED = 'failed',
 }

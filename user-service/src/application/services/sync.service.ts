@@ -35,7 +35,8 @@ export class SyncService {
     if (
       latestSync &&
       (latestSync.status === SyncStatus.PENDING ||
-        latestSync.status === SyncStatus.RUNNING)
+        latestSync.status === SyncStatus.RUNNING ||
+        latestSync.status === SyncStatus.PROCESSING)
     ) {
       this.logger.log('Sincronização já em andamento', {
         syncLogId: latestSync.id,
