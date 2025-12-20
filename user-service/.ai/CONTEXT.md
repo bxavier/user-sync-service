@@ -22,21 +22,23 @@ Leia os seguintes arquivos de contexto antes de continuar o desenvolvimento:
 - LoggerService customizado (estende ConsoleLogger do NestJS)
 - TypeORM logger integrado ao formato NestJS
 
-**Fase 2 (Domínio e Persistência)**: Em Progresso
+**Fase 2 (Domínio e Persistência)**: Concluída
 - [x] `User` entity criada (com soft delete via campo `deleted`)
 - [x] `SyncLog` entity criada (com enum `SyncStatus`)
 - [x] Entidades registradas no TypeORM (`TypeOrmModule.forFeature`)
-- [ ] Interface `UserRepository` (pendente)
-- [ ] Implementar `UserRepositoryImpl` (pendente)
+- [x] Interface `UserRepository` + `UserRepositoryImpl`
+- [x] Interface `SyncLogRepository` + `SyncLogRepositoryImpl`
+- [x] Providers centralizados em `repositories.providers.ts`
 
-**Próxima Fase**: Fase 3 - CRUD de Usuários
+**Fase 3 (CRUD de Usuários)**: Em Progresso
 
-## Tarefas Pendentes (Fase 2)
+## Tarefas Pendentes (Fase 3)
 
-- [ ] Criar interface `UserRepository`
-- [ ] Implementar `UserRepositoryImpl`
-- [ ] Criar interface `SyncLogRepository`
-- [ ] Implementar `SyncLogRepositoryImpl`
+- [ ] DTOs com validação (class-validator)
+- [ ] `UserService` com lógica de negócio
+- [ ] `UserController` com endpoints
+- [ ] Exception filter global
+- [ ] Swagger documentation
 
 ## Arquivos Principais do Projeto
 
@@ -50,7 +52,10 @@ user-service/
 │   │   │   ├── index.ts                 # Barrel exports
 │   │   │   ├── user.entity.ts           # ✅ User entity (soft delete)
 │   │   │   └── sync-log.entity.ts       # ✅ SyncLog entity (com SyncStatus enum)
-│   │   └── repositories/                # Interfaces (a criar)
+│   │   └── repositories/
+│   │       ├── index.ts                 # Barrel exports
+│   │       ├── user.repository.interface.ts    # ✅ UserRepository interface
+│   │       └── sync-log.repository.interface.ts # ✅ SyncLogRepository interface
 │   ├── application/
 │   │   ├── services/                    # UserService, SyncService (a criar)
 │   │   └── dtos/                        # DTOs (a criar)
@@ -63,7 +68,11 @@ user-service/
 │   │   ├── logger/
 │   │   │   ├── custom-logger.service.ts # LoggerService (ConsoleLogger)
 │   │   │   └── index.ts
-│   │   ├── repositories/                # Implementações (a criar)
+│   │   ├── repositories/
+│   │       ├── index.ts                 # Barrel exports
+│   │       ├── user.repository.ts       # ✅ UserRepositoryImpl
+│   │       ├── sync-log.repository.ts   # ✅ SyncLogRepositoryImpl
+│   │       └── repositories.providers.ts # ✅ Providers centralizados
 │   │   ├── legacy/                      # Cliente API legada (a criar)
 │   │   ├── queue/                       # BullMQ (a criar)
 │   │   └── resilience/                  # Retry, Circuit Breaker (a criar)

@@ -14,8 +14,8 @@
 | Fase | Status | Descrição |
 |------|--------|-----------|
 | 1 | ✅ Concluído | Setup do Projeto |
-| 2 | 🔄 Em Progresso | Domínio e Persistência |
-| 3 | Pendente | CRUD de Usuários |
+| 2 | ✅ Concluído | Domínio e Persistência |
+| 3 | 🔄 Em Progresso | CRUD de Usuários |
 | 4 | Pendente | Cliente do Sistema Legado |
 | 5 | Pendente | Sincronização com BullMQ |
 | 6 | Pendente | Exportação CSV |
@@ -43,17 +43,18 @@
 ---
 
 ## Fase 2: Domínio e Persistência
-**Status**: 🔄 Em Progresso
+**Status**: ✅ Concluído
 
 ### Tarefas
 - [x] Criar `User` entity (TypeORM) - campos: id, legacyId, userName, email, legacyCreatedAt, createdAt, updatedAt, deleted, deletedAt
 - [x] Criar `SyncLog` entity - campos: id, status (enum), startedAt, finishedAt, totalProcessed, errorMessage, durationMs
 - [x] Configurar soft delete (campo `deleted` + `deletedAt` na User entity)
 - [x] Registrar entidades no AppModule (`TypeOrmModule.forFeature`)
-- [ ] Criar interface `UserRepository`
-- [ ] Implementar `UserRepositoryImpl`
-- [ ] Criar interface `SyncLogRepository`
-- [ ] Implementar `SyncLogRepositoryImpl`
+- [x] Criar interface `UserRepository`
+- [x] Implementar `UserRepositoryImpl`
+- [x] Criar interface `SyncLogRepository`
+- [x] Implementar `SyncLogRepositoryImpl`
+- [x] Centralizar providers em `repositories.providers.ts`
 
 ### Critério de Conclusão
 Entidades mapeadas, banco criado automaticamente, repositórios implementados
@@ -61,7 +62,7 @@ Entidades mapeadas, banco criado automaticamente, repositórios implementados
 ---
 
 ## Fase 3: CRUD de Usuários
-**Status**: Pendente
+**Status**: 🔄 Em Progresso
 
 ### Tarefas
 - [ ] DTOs com validação (class-validator)

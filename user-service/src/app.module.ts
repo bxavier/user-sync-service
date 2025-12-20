@@ -6,6 +6,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { typeOrmConfig } from './infrastructure/database/typeorm.config';
 import { User, SyncLog } from './domain/entities';
+import { repositoriesProviders } from './infrastructure/repositories';
 
 @Module({
   imports: [
@@ -30,6 +31,6 @@ import { User, SyncLog } from './domain/entities';
     ]),
   ],
   controllers: [],
-  providers: [],
+  providers: [...repositoriesProviders],
 })
 export class AppModule {}

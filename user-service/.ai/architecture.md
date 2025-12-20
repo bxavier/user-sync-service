@@ -29,7 +29,9 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
 - **Entities**:
   - `User` - usuário sincronizado (com soft delete via `deleted`/`deletedAt`)
   - `SyncLog` - log de execução de sincronização (com enum `SyncStatus`)
-- **Repository Interfaces**: Contratos para persistência (a implementar)
+- **Repository Interfaces** (✅ implementado):
+  - `UserRepository` - findAll, findById, findByUserName, create, update, softDelete, upsertByLegacyId
+  - `SyncLogRepository` - create, update, findById, findLatest, findAll
 
 ### Application Layer
 - **Services**: Lógica de negócio (UserService, SyncService)
@@ -39,7 +41,10 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
 - **Database**: Configuração TypeORM + SQLite (✅ implementado)
   - `typeorm.config.ts` - configuração do banco
   - `typeorm-logger.ts` - logger integrado ao NestJS
-- **Repositories**: Implementações concretas (a implementar)
+- **Repositories** (✅ implementado):
+  - `UserRepositoryImpl` - implementação com TypeORM
+  - `SyncLogRepositoryImpl` - implementação com TypeORM
+  - `repositories.providers.ts` - providers centralizados para DI
 - **Legacy**: Cliente para API legada + Stream Parser (a implementar)
 - **Queue**: BullMQ para jobs assíncronos (configurado no AppModule)
 - **Resilience**: Retry, Circuit Breaker (a implementar)
