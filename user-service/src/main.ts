@@ -6,11 +6,15 @@ import {
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { setupSwagger } from './infrastructure/config/swagger.config';
+import { LoggerService } from './infrastructure/logger';
 
 async function bootstrap() {
+  const logger = new LoggerService('Main');
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: true }),
+    new FastifyAdapter(),
+    { logger },
   );
 
   app.useGlobalPipes(
@@ -26,8 +30,7 @@ async function bootstrap() {
   const port = process.env.PORT ?? 3000;
   await app.listen(port, '0.0.0.0');
 
-  console.log(`Application is running on: ${await app.getUrl()}`);
-  console.log(`Swagger documentation: ${await app.getUrl()}/api/docs`);
+  logger.log('Application started', { port, docs: '/api/docs' });
 }
 
 bootstrap();

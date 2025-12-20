@@ -39,6 +39,7 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
 - **Legacy**: Cliente para API legada + Stream Parser
 - **Queue**: BullMQ para jobs assíncronos
 - **Resilience**: Retry, Circuit Breaker
+- **Logger**: LoggerService customizado (estende ConsoleLogger)
 
 ### Presentation Layer
 - **Controllers**: Endpoints REST

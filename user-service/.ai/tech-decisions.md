@@ -104,3 +104,46 @@ Desenvolver com Docker + SQLite + BullMQ, documentar arquitetura Lambda.
 | SQLite | Aurora/DynamoDB |
 | BullMQ | Step Functions |
 | Redis | ElastiCache/SQS |
+
+---
+
+## TDR-006: Logger Customizado com NestJS ConsoleLogger
+
+**Data**: 2024-12-20
+**Status**: Aprovado
+
+### Contexto
+Precisamos de um logger consistente com suporte a metadata estruturada.
+
+### Decisão
+Criar LoggerService customizado estendendo o ConsoleLogger nativo do NestJS.
+
+### Justificativa
+- **Sem dependências externas**: Não adiciona Winston, Pino ou outras libs
+- **Integração nativa**: Funciona com o lifecycle do NestJS
+- **Metadata estruturada**: Suporte a objetos JSON nos logs
+- **Method tracking**: Captura automaticamente o nome do método via stack trace
+- **Formatação colorida**: Usa formatação nativa do NestJS
+
+### Uso
+```typescript
+// Injeção via construtor
+private readonly logger = new LoggerService(MyService.name);
+
+// Log simples
+this.logger.log('Message');
+
+// Log com metadata
+this.logger.log('Operation completed', { userId: 123, duration: '50ms' });
+
+// Error com stack
+this.logger.error('Failed', { error: error.message });
+```
+
+### Estrutura
+```
+infrastructure/
+└── logger/
+    ├── custom-logger.service.ts  # LoggerService
+    └── index.ts                   # Barrel export
+```

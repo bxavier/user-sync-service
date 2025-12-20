@@ -19,6 +19,8 @@ Leia os seguintes arquivos de contexto antes de continuar o desenvolvimento:
 - BullMQ + Redis configurado
 - Docker + docker-compose configurado
 - Estrutura DDD criada
+- LoggerService customizado (estende ConsoleLogger do NestJS)
+- TypeORM logger integrado ao formato NestJS
 
 **Próxima Fase**: Fase 2 - Domínio e Persistência
 
@@ -47,7 +49,11 @@ user-service/
 │   │   ├── config/
 │   │   │   └── swagger.config.ts
 │   │   ├── database/
-│   │   │   └── typeorm.config.ts
+│   │   │   ├── typeorm.config.ts
+│   │   │   └── typeorm-logger.ts        # Logger TypeORM → NestJS format
+│   │   ├── logger/
+│   │   │   ├── custom-logger.service.ts # LoggerService (ConsoleLogger)
+│   │   │   └── index.ts
 │   │   ├── repositories/                # Implementações (a criar)
 │   │   ├── legacy/                      # Cliente API legada (a criar)
 │   │   ├── queue/                       # BullMQ (a criar)
