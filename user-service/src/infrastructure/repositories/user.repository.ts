@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { User } from '../../domain/entities';
 import {
   UserRepository,
@@ -16,6 +16,7 @@ export class UserRepositoryImpl implements UserRepository {
   constructor(
     @InjectRepository(User)
     private readonly repository: Repository<User>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async findAll(options: FindAllOptions = {}): Promise<FindAllResult> {
@@ -133,9 +134,12 @@ export class UserRepositoryImpl implements UserRepository {
       deletedAt: item.deleted ? new Date() : null,
     }));
 
-    await this.repository.upsert(entities, {
-      conflictPaths: ['userName'],
-      skipUpdateIfNoValuesChanged: true,
+    // Usa transação explícita para reduzir I/O de disco
+    await this.dataSource.transaction(async (manager) => {
+      await manager.upsert(User, entities, {
+        conflictPaths: ['userName'],
+        skipUpdateIfNoValuesChanged: true,
+      });
     });
 
     return data.length;
