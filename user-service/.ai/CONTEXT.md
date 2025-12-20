@@ -22,25 +22,34 @@ Leia os seguintes arquivos de contexto antes de continuar o desenvolvimento:
 - LoggerService customizado (estende ConsoleLogger do NestJS)
 - TypeORM logger integrado ao formato NestJS
 
-**Próxima Fase**: Fase 2 - Domínio e Persistência
+**Fase 2 (Domínio e Persistência)**: Em Progresso
+- [x] `User` entity criada (com soft delete via campo `deleted`)
+- [x] `SyncLog` entity criada (com enum `SyncStatus`)
+- [x] Entidades registradas no TypeORM (`TypeOrmModule.forFeature`)
+- [ ] Interface `UserRepository` (pendente)
+- [ ] Implementar `UserRepositoryImpl` (pendente)
+
+**Próxima Fase**: Fase 3 - CRUD de Usuários
 
 ## Tarefas Pendentes (Fase 2)
 
-- [ ] Criar `User` entity (TypeORM)
-- [ ] Criar `SyncLog` entity
 - [ ] Criar interface `UserRepository`
 - [ ] Implementar `UserRepositoryImpl`
-- [ ] Configurar soft delete
+- [ ] Criar interface `SyncLogRepository`
+- [ ] Implementar `SyncLogRepositoryImpl`
 
 ## Arquivos Principais do Projeto
 
 ```
 user-service/
 ├── src/
-│   ├── app.module.ts                    # Módulo principal
+│   ├── app.module.ts                    # Módulo principal (com ThrottlerModule, ScheduleModule)
 │   ├── main.ts                          # Bootstrap com Fastify
 │   ├── domain/
-│   │   ├── entities/                    # User, SyncLog (a criar)
+│   │   ├── entities/
+│   │   │   ├── index.ts                 # Barrel exports
+│   │   │   ├── user.entity.ts           # ✅ User entity (soft delete)
+│   │   │   └── sync-log.entity.ts       # ✅ SyncLog entity (com SyncStatus enum)
 │   │   └── repositories/                # Interfaces (a criar)
 │   ├── application/
 │   │   ├── services/                    # UserService, SyncService (a criar)
@@ -77,6 +86,13 @@ npm run start:dev
 
 # Swagger disponível em: http://localhost:3000/api/docs
 ```
+
+## Fluxo de Desenvolvimento
+
+**IMPORTANTE**: Antes de implementar qualquer código, o assistente DEVE:
+1. Explicar o que será implementado e por quê
+2. Descrever a abordagem técnica escolhida
+3. Aguardar aprovação do usuário antes de aplicar as mudanças
 
 ## Commits
 

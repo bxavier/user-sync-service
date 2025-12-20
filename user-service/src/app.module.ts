@@ -5,6 +5,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { typeOrmConfig } from './infrastructure/database/typeorm.config';
+import { User, SyncLog } from './domain/entities';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { typeOrmConfig } from './infrastructure/database/typeorm.config';
       envFilePath: '.env',
     }),
     TypeOrmModule.forRoot(typeOrmConfig()),
+    TypeOrmModule.forFeature([User, SyncLog]),
     BullModule.forRoot({
       connection: {
         host: process.env.REDIS_HOST || 'localhost',

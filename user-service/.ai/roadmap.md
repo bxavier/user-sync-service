@@ -1,11 +1,20 @@
 # Roadmap de Desenvolvimento
 
+## Fluxo de Implementação
+
+**IMPORTANTE**: Antes de implementar qualquer tarefa abaixo, o assistente DEVE:
+1. Explicar o que será implementado e por quê
+2. Descrever a abordagem técnica escolhida
+3. Aguardar aprovação do usuário antes de aplicar as mudanças
+
+---
+
 ## Status Geral
 
 | Fase | Status | Descrição |
 |------|--------|-----------|
-| 1 | Concluído | Setup do Projeto |
-| 2 | Pendente | Domínio e Persistência |
+| 1 | ✅ Concluído | Setup do Projeto |
+| 2 | 🔄 Em Progresso | Domínio e Persistência |
 | 3 | Pendente | CRUD de Usuários |
 | 4 | Pendente | Cliente do Sistema Legado |
 | 5 | Pendente | Sincronização com BullMQ |
@@ -34,17 +43,20 @@
 ---
 
 ## Fase 2: Domínio e Persistência
-**Status**: Pendente
+**Status**: 🔄 Em Progresso
 
 ### Tarefas
-- [ ] Criar `User` entity (TypeORM)
-- [ ] Criar `SyncLog` entity
+- [x] Criar `User` entity (TypeORM) - campos: id, legacyId, userName, email, legacyCreatedAt, createdAt, updatedAt, deleted, deletedAt
+- [x] Criar `SyncLog` entity - campos: id, status (enum), startedAt, finishedAt, totalProcessed, errorMessage, durationMs
+- [x] Configurar soft delete (campo `deleted` + `deletedAt` na User entity)
+- [x] Registrar entidades no AppModule (`TypeOrmModule.forFeature`)
 - [ ] Criar interface `UserRepository`
 - [ ] Implementar `UserRepositoryImpl`
-- [ ] Configurar soft delete
+- [ ] Criar interface `SyncLogRepository`
+- [ ] Implementar `SyncLogRepositoryImpl`
 
 ### Critério de Conclusão
-Entidades mapeadas, banco criado automaticamente
+Entidades mapeadas, banco criado automaticamente, repositórios implementados
 
 ---
 

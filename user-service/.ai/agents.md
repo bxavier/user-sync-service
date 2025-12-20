@@ -132,6 +132,17 @@ src/
 
 ---
 
+## Fluxo de Desenvolvimento
+
+**IMPORTANTE**: Antes de implementar qualquer código, o assistente DEVE:
+1. **Explicar** o que será implementado e por quê
+2. **Descrever** a abordagem técnica escolhida
+3. **Aguardar aprovação** do usuário antes de aplicar as mudanças
+
+Isso garante alinhamento e permite que o usuário entenda e valide cada decisão técnica.
+
+---
+
 ## Alertas Importantes
 
 ### NÃO FAZER

@@ -26,20 +26,24 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
 ## Camadas (DDD Simplificado)
 
 ### Domain Layer
-- **Entities**: User, SyncLog
-- **Repository Interfaces**: Contratos para persistência
+- **Entities**:
+  - `User` - usuário sincronizado (com soft delete via `deleted`/`deletedAt`)
+  - `SyncLog` - log de execução de sincronização (com enum `SyncStatus`)
+- **Repository Interfaces**: Contratos para persistência (a implementar)
 
 ### Application Layer
 - **Services**: Lógica de negócio (UserService, SyncService)
 - **DTOs**: Objetos de transferência com validação
 
 ### Infrastructure Layer
-- **Database**: Configuração TypeORM + SQLite
-- **Repositories**: Implementações concretas
-- **Legacy**: Cliente para API legada + Stream Parser
-- **Queue**: BullMQ para jobs assíncronos
-- **Resilience**: Retry, Circuit Breaker
-- **Logger**: LoggerService customizado (estende ConsoleLogger)
+- **Database**: Configuração TypeORM + SQLite (✅ implementado)
+  - `typeorm.config.ts` - configuração do banco
+  - `typeorm-logger.ts` - logger integrado ao NestJS
+- **Repositories**: Implementações concretas (a implementar)
+- **Legacy**: Cliente para API legada + Stream Parser (a implementar)
+- **Queue**: BullMQ para jobs assíncronos (configurado no AppModule)
+- **Resilience**: Retry, Circuit Breaker (a implementar)
+- **Logger**: LoggerService customizado (✅ estende ConsoleLogger)
 
 ### Presentation Layer
 - **Controllers**: Endpoints REST
