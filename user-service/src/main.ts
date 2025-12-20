@@ -7,6 +7,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { setupSwagger } from './infrastructure/config/swagger.config';
 import { LoggerService } from './infrastructure/logger';
+import { HttpExceptionFilter } from './presentation/filters';
 
 async function bootstrap() {
   const logger = new LoggerService('Main');
@@ -24,6 +25,8 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  app.useGlobalFilters(new HttpExceptionFilter());
 
   setupSwagger(app);
 

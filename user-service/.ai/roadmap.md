@@ -15,8 +15,8 @@
 |------|--------|-----------|
 | 1 | ✅ Concluído | Setup do Projeto |
 | 2 | ✅ Concluído | Domínio e Persistência |
-| 3 | 🔄 Em Progresso | CRUD de Usuários |
-| 4 | Pendente | Cliente do Sistema Legado |
+| 3 | ✅ Concluído | CRUD de Usuários |
+| 4 | 🔄 Em Progresso | Cliente do Sistema Legado |
 | 5 | Pendente | Sincronização com BullMQ |
 | 6 | Pendente | Exportação CSV |
 | 7 | Pendente | Qualidade e Observabilidade |
@@ -62,14 +62,14 @@ Entidades mapeadas, banco criado automaticamente, repositórios implementados
 ---
 
 ## Fase 3: CRUD de Usuários
-**Status**: 🔄 Em Progresso
+**Status**: ✅ Concluído
 
 ### Tarefas
-- [ ] DTOs com validação (class-validator)
-- [ ] `UserService` com lógica de negócio
-- [ ] `UserController` com endpoints
-- [ ] Exception filter global
-- [ ] Swagger documentation
+- [x] DTOs com validação (CreateUserDto, UpdateUserDto, PaginationDto, UserResponseDto)
+- [x] `UserService` com lógica de negócio
+- [x] `UserController` com endpoints (GET /users, GET /users/:user_name, POST /users, PUT /users/:id, DELETE /users/:id)
+- [x] `HttpExceptionFilter` global
+- [x] Swagger documentation via decorators
 
 ### Critério de Conclusão
 CRUD completo testável via Swagger
@@ -77,7 +77,7 @@ CRUD completo testável via Swagger
 ---
 
 ## Fase 4: Cliente do Sistema Legado
-**Status**: Pendente
+**Status**: 🔄 Em Progresso
 
 ### Tarefas
 - [ ] `LegacyApiClient` com axios

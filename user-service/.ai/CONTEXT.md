@@ -30,15 +30,21 @@ Leia os seguintes arquivos de contexto antes de continuar o desenvolvimento:
 - [x] Interface `SyncLogRepository` + `SyncLogRepositoryImpl`
 - [x] Providers centralizados em `repositories.providers.ts`
 
-**Fase 3 (CRUD de Usuários)**: Em Progresso
+**Fase 3 (CRUD de Usuários)**: Concluída
+- [x] DTOs com validação (CreateUserDto, UpdateUserDto, PaginationDto, UserResponseDto)
+- [x] `UserService` com lógica de negócio
+- [x] `UserController` com endpoints REST
+- [x] `HttpExceptionFilter` global
+- [x] Swagger documentation via decorators
 
-## Tarefas Pendentes (Fase 3)
+**Fase 4 (Cliente do Sistema Legado)**: Pendente
 
-- [ ] DTOs com validação (class-validator)
-- [ ] `UserService` com lógica de negócio
-- [ ] `UserController` com endpoints
-- [ ] Exception filter global
-- [ ] Swagger documentation
+## Tarefas Pendentes (Fase 4)
+
+- [ ] `LegacyApiClient` com axios
+- [ ] `StreamParser` para JSON concatenado
+- [ ] Retry com exponential backoff
+- [ ] Circuit breaker simples
 
 ## Arquivos Principais do Projeto
 
@@ -57,8 +63,15 @@ user-service/
 │   │       ├── user.repository.interface.ts    # ✅ UserRepository interface
 │   │       └── sync-log.repository.interface.ts # ✅ SyncLogRepository interface
 │   ├── application/
-│   │   ├── services/                    # UserService, SyncService (a criar)
-│   │   └── dtos/                        # DTOs (a criar)
+│   │   ├── services/
+│   │   │   ├── index.ts
+│   │   │   └── user.service.ts          # ✅ UserService
+│   │   └── dtos/
+│   │       ├── index.ts
+│   │       ├── create-user.dto.ts       # ✅ CreateUserDto
+│   │       ├── update-user.dto.ts       # ✅ UpdateUserDto
+│   │       ├── pagination.dto.ts        # ✅ PaginationDto
+│   │       └── user-response.dto.ts     # ✅ UserResponseDto, PaginatedUsersResponseDto
 │   ├── infrastructure/
 │   │   ├── config/
 │   │   │   └── swagger.config.ts
@@ -77,8 +90,12 @@ user-service/
 │   │   ├── queue/                       # BullMQ (a criar)
 │   │   └── resilience/                  # Retry, Circuit Breaker (a criar)
 │   └── presentation/
-│       ├── controllers/                 # Controllers (a criar)
-│       └── filters/                     # Exception filters (a criar)
+│       ├── controllers/
+│       │   ├── index.ts
+│       │   └── user.controller.ts       # ✅ UserController (CRUD endpoints)
+│       └── filters/
+│           ├── index.ts
+│           └── http-exception.filter.ts # ✅ HttpExceptionFilter global
 ├── .env                                 # Variáveis de ambiente
 ├── docker-compose.yml
 └── package.json

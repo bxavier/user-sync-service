@@ -34,8 +34,12 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
   - `SyncLogRepository` - create, update, findById, findLatest, findAll
 
 ### Application Layer
-- **Services**: Lógica de negócio (UserService, SyncService)
-- **DTOs**: Objetos de transferência com validação
+- **Services** (✅ implementado):
+  - `UserService` - CRUD de usuários, validação de unicidade
+- **DTOs** (✅ implementado):
+  - `CreateUserDto`, `UpdateUserDto` - entrada com validação
+  - `PaginationDto` - paginação
+  - `UserResponseDto`, `PaginatedUsersResponseDto` - saída
 
 ### Infrastructure Layer
 - **Database**: Configuração TypeORM + SQLite (✅ implementado)
@@ -50,9 +54,11 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
 - **Resilience**: Retry, Circuit Breaker (a implementar)
 - **Logger**: LoggerService customizado (✅ estende ConsoleLogger)
 
-### Presentation Layer
-- **Controllers**: Endpoints REST
-- **Filters**: Tratamento global de exceções
+### Presentation Layer (✅ implementado)
+- **Controllers**:
+  - `UserController` - GET /users, GET /users/:user_name, POST /users, PUT /users/:id, DELETE /users/:id
+- **Filters**:
+  - `HttpExceptionFilter` - tratamento global de exceções com logging
 
 ## Padrões de Resiliência
 
