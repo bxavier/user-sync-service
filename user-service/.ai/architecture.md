@@ -36,6 +36,7 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
 ### Application Layer
 - **Services** (✅ implementado):
   - `UserService` - CRUD de usuários, validação de unicidade
+  - `SyncService` - enfileiramento de jobs, verificação de idempotência, cron scheduler
 - **DTOs** (✅ implementado):
   - `CreateUserDto`, `UpdateUserDto` - entrada com validação
   - `PaginationDto` - paginação
@@ -56,12 +57,15 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
 - **Resilience** (✅ implementado):
   - `withRetry` - função de retry com exponential backoff
   - `CircuitBreaker` - proteção contra falhas cascata
-- **Queue**: BullMQ para jobs assíncronos (configurado no AppModule)
+- **Queue** (✅ implementado):
+  - `sync.constants.ts` - constantes da fila (`SYNC_QUEUE_NAME`, `SYNC_JOB_NAME`)
+  - `SyncProcessor` - worker BullMQ que processa jobs de sincronização
 - **Logger**: LoggerService customizado (✅ estende ConsoleLogger)
 
 ### Presentation Layer (✅ implementado)
 - **Controllers**:
   - `UserController` - GET /users, GET /users/:user_name, POST /users, PUT /users/:id, DELETE /users/:id
+  - `SyncController` - POST /sync, GET /sync/status, GET /sync/history
 - **Filters**:
   - `HttpExceptionFilter` - tratamento global de exceções com logging
 
@@ -88,13 +92,33 @@ const circuitBreakerConfig = {
 
 ## Fluxo de Sincronização
 
-1. `POST /sync` enfileira job no BullMQ
-2. Worker consome job da fila
-3. Legacy Client busca dados com retry
-4. Stream Parser processa JSON concatenado
-5. Deduplicação por `user_name` (mantém mais recente)
-6. Upsert no banco de dados
-7. SyncLog registra resultado
+```
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│ POST /sync   │───▶│ SyncService  │───▶│ BullMQ Queue │───▶│SyncProcessor │
+│ ou Cron Job  │    │ (idempotent) │    │  (Redis)     │    │  (Worker)    │
+└──────────────┘    └──────────────┘    └──────────────┘    └──────┬───────┘
+                           │                                       │
+                           ▼                                       ▼
+                    ┌──────────────┐                       ┌──────────────┐
+                    │  SyncLog     │◀──────────────────────│LegacyApiClient│
+                    │  (status)    │                       │  (fetch)     │
+                    └──────────────┘                       └──────┬───────┘
+                                                                  │
+                                                                  ▼
+                                                          ┌──────────────┐
+                                                          │UserRepository│
+                                                          │(upsertByLegacyId)│
+                                                          └──────────────┘
+```
+
+1. `POST /sync` ou Cron Job (a cada 5 min) chama `SyncService.triggerSync()`
+2. SyncService verifica idempotência (se há sync PENDING/RUNNING, retorna existente)
+3. Cria SyncLog com status PENDING e enfileira job no BullMQ
+4. SyncProcessor consome job, atualiza status para RUNNING
+5. LegacyApiClient busca dados com retry + circuit breaker
+6. StreamParser processa JSON concatenado
+7. Para cada usuário: `upsertByLegacyId` (deduplicação por legacyId, mantém mais recente)
+8. Atualiza SyncLog com status COMPLETED/FAILED, totalProcessed, durationMs
 
 ## Decisões Técnicas
 

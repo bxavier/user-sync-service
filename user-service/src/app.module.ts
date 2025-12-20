@@ -7,8 +7,10 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { typeOrmConfig } from './infrastructure/database/typeorm.config';
 import { User, SyncLog } from './domain/entities';
 import { repositoriesProviders } from './infrastructure/repositories';
-import { UserController } from './presentation/controllers';
-import { UserService } from './application/services';
+import { UserController, SyncController } from './presentation/controllers';
+import { UserService, SyncService } from './application/services';
+import { SYNC_QUEUE_NAME, SyncProcessor } from './infrastructure/queue';
+import { LegacyApiClient, StreamParser } from './infrastructure/legacy';
 
 @Module({
   imports: [
@@ -24,6 +26,9 @@ import { UserService } from './application/services';
         port: parseInt(process.env.REDIS_PORT || '6379', 10),
       },
     }),
+    BullModule.registerQueue({
+      name: SYNC_QUEUE_NAME,
+    }),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
       {
@@ -32,7 +37,14 @@ import { UserService } from './application/services';
       },
     ]),
   ],
-  controllers: [UserController],
-  providers: [...repositoriesProviders, UserService],
+  controllers: [UserController, SyncController],
+  providers: [
+    ...repositoriesProviders,
+    UserService,
+    SyncService,
+    SyncProcessor,
+    LegacyApiClient,
+    StreamParser,
+  ],
 })
 export class AppModule {}

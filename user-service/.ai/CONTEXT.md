@@ -49,15 +49,22 @@ Leia os seguintes arquivos de contexto antes de continuar o desenvolvimento:
 - [x] Tratamento de JSON corrompido (via StreamParser)
 - [x] Logging detalhado
 
-## Tarefas Pendentes (Fase 5 - Sincronização)
+**Fase 5 (Sincronização com BullMQ)**: Concluída
 
-- [ ] Configurar BullMQ Queue
-- [ ] Criar `SyncProcessor` (worker)
-- [ ] Lógica de deduplicação por `user_name`
-- [ ] Histórico/log de execuções (SyncLog)
-- [ ] Endpoint `POST /sync`
-- [ ] Cron job para sync periódico
-- [ ] Garantir idempotência
+- [x] Configurar BullMQ Queue (`SYNC_QUEUE_NAME`)
+- [x] Criar `SyncProcessor` (worker)
+- [x] Lógica de deduplicação por `legacyId` (via `upsertByLegacyId`)
+- [x] Histórico/log de execuções (SyncLog)
+- [x] Endpoint `POST /sync`
+- [x] Endpoints `GET /sync/status` e `GET /sync/history`
+- [x] Cron job para sync periódico (a cada 5 minutos)
+- [x] Garantir idempotência (verifica se já existe sync PENDING/RUNNING)
+
+## Tarefas Pendentes (Fase 6 - Exportação CSV)
+
+- [ ] Endpoint `GET /users/export/csv`
+- [ ] Filtros `created_from`, `created_to`
+- [ ] Streaming response
 
 ## Arquivos Principais do Projeto
 
@@ -78,7 +85,8 @@ user-service/
 │   ├── application/
 │   │   ├── services/
 │   │   │   ├── index.ts
-│   │   │   └── user.service.ts          # ✅ UserService
+│   │   │   ├── user.service.ts          # ✅ UserService
+│   │   │   └── sync.service.ts          # ✅ SyncService (enfileiramento + cron)
 │   │   └── dtos/
 │   │       ├── index.ts
 │   │       ├── create-user.dto.ts       # ✅ CreateUserDto
@@ -108,11 +116,15 @@ user-service/
 │   │   │   ├── index.ts                 # Barrel exports
 │   │   │   ├── retry.ts                 # ✅ withRetry (exponential backoff)
 │   │   │   └── circuit-breaker.ts       # ✅ CircuitBreaker
-│   │   └── queue/                       # BullMQ (a criar)
+│   │   └── queue/                       # BullMQ
+│   │       ├── index.ts                 # Barrel exports
+│   │       ├── sync.constants.ts        # ✅ SYNC_QUEUE_NAME, SYNC_JOB_NAME
+│   │       └── sync.processor.ts        # ✅ SyncProcessor (worker)
 │   └── presentation/
 │       ├── controllers/
 │       │   ├── index.ts
-│       │   └── user.controller.ts       # ✅ UserController (CRUD endpoints)
+│       │   ├── user.controller.ts       # ✅ UserController (CRUD endpoints)
+│       │   └── sync.controller.ts       # ✅ SyncController (POST /sync, GET /sync/status)
 │       └── filters/
 │           ├── index.ts
 │           └── http-exception.filter.ts # ✅ HttpExceptionFilter global

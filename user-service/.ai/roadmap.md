@@ -17,7 +17,7 @@
 | 2 | ✅ Concluído | Domínio e Persistência |
 | 3 | ✅ Concluído | CRUD de Usuários |
 | 4 | ✅ Concluído | Cliente do Sistema Legado |
-| 5 | Pendente | Sincronização com BullMQ |
+| 5 | ✅ Concluído | Sincronização com BullMQ |
 | 6 | Pendente | Exportação CSV |
 | 7 | Pendente | Qualidade e Observabilidade |
 | 8 | Pendente | Documentação e Entrega |
@@ -93,16 +93,17 @@ Consegue consumir stream mesmo com erros simulados
 ---
 
 ## Fase 5: Sincronização com BullMQ
-**Status**: Pendente
+**Status**: ✅ Concluído
 
 ### Tarefas
-- [ ] Configurar BullMQ Queue
-- [ ] Criar `SyncProcessor` (worker)
-- [ ] Lógica de deduplicação por `user_name`
-- [ ] Histórico/log de execuções (SyncLog)
-- [ ] Endpoint `POST /sync`
-- [ ] Cron job para sync periódico
-- [ ] Garantir idempotência
+- [x] Configurar BullMQ Queue (`SYNC_QUEUE_NAME`, `BullModule.registerQueue`)
+- [x] Criar `SyncProcessor` (worker com `@Processor`)
+- [x] Lógica de deduplicação por `legacyId` (via `upsertByLegacyId`)
+- [x] Histórico/log de execuções (SyncLog com status PENDING/RUNNING/COMPLETED/FAILED)
+- [x] Endpoint `POST /sync` (retorna 202 Accepted)
+- [x] Endpoints auxiliares `GET /sync/status` e `GET /sync/history`
+- [x] Cron job para sync periódico (a cada 5 minutos via `@Cron`)
+- [x] Garantir idempotência (verifica se já existe sync PENDING/RUNNING antes de enfileirar)
 
 ### Critério de Conclusão
 Múltiplas syncs não geram duplicatas
