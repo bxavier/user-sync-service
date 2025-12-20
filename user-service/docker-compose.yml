@@ -1,0 +1,43 @@
+services:
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_PATH=/app/data/database.sqlite
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LEGACY_API_URL=http://legacy-api:3001
+      - LEGACY_API_KEY=${LEGACY_API_KEY:-test-api-key-2024}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_started
+      legacy-api:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  legacy-api:
+    build: ../legacy-api/api
+    ports:
+      - "3001:3001"
+    environment:
+      - API_KEY=${LEGACY_API_KEY:-test-api-key-2024}
+    restart: unless-stopped
+
+volumes:
+  redis-data:
