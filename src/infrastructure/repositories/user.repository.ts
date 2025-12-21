@@ -11,9 +11,12 @@ import {
   UpsertUserData,
   ExportFilters,
 } from '../../domain/repositories/user.repository.interface';
+import { LoggerService } from '../logger';
 
 @Injectable()
 export class UserRepositoryImpl implements UserRepository {
+  private readonly logger = new LoggerService(UserRepositoryImpl.name);
+
   constructor(
     @InjectRepository(User)
     private readonly repository: Repository<User>,
@@ -140,8 +143,8 @@ export class UserRepositoryImpl implements UserRepository {
     const totalMs = Date.now() - startTime;
     if (totalMs > 100) {
       // Log apenas se demorar mais de 100ms
-      console.log(
-        `[DB] bulkUpsert: ${data.length} registros em ${totalChunks} chunks, ${totalMs}ms (${Math.round(data.length / (totalMs / 1000))} reg/s)`,
+      this.logger.debug(
+        `bulkUpsert: ${data.length} registros em ${totalChunks} chunks, ${totalMs}ms (${Math.round(data.length / (totalMs / 1000))} reg/s)`,
       );
     }
 

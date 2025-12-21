@@ -165,7 +165,7 @@ O sistema de sincronização foi otimizado para processar **1 milhão de usuári
 | Streaming HTTP | Processa dados conforme chegam, sem carregar tudo em memória |
 | Bulk Upsert com Raw SQL | INSERT com ON CONFLICT direto no SQLite |
 | Retry rápido | Delays de 100-500ms ao invés de segundos |
-| Filas paralelas | 5 workers processando batches simultaneamente |
+| Batch Processing | Batches de 1000 usuários processados via BullMQ |
 | Non-blocking callbacks | Enfileira batches sem bloquear o stream |
 
 ## Status do desenvolvimento

@@ -10,6 +10,7 @@ dist/
 .env.*.local
 
 # Database
+data/
 *.sqlite
 *.sqlite3
 
@@ -34,3 +35,6 @@ coverage/
 # Temporary files
 tmp/
 temp/
+
+# AI context (internal documentation)
+.ai/
