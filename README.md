@@ -1,181 +1,352 @@
-# User Service
+# User Service - Teste Técnico
 
 Serviço de integração que sincroniza dados de um sistema legado instável, mantém base própria e disponibiliza endpoints REST.
 
-## O que este serviço faz
+## Sobre o Projeto
 
-1. **Busca dados** de uma API legada (que simula falhas, rate limiting e JSON corrompido)
-2. **Armazena localmente** em SQLite com deduplicação
-3. **Disponibiliza endpoints REST** para consulta e manipulação dos dados
+Este serviço foi desenvolvido como solução para o desafio de integração com um sistema legado que apresenta:
 
-## Stack
+- **40% de taxa de erro** (20% HTTP 500 + 20% HTTP 429)
+- **20% de dados corrompidos** (JSON inválido)
+- **Duplicatas** por `user_name`
+- **Soft deletes** misturados com registros ativos
 
-| Tecnologia | Uso |
-|------------|-----|
-| NestJS + Fastify | Framework web |
-| SQLite + TypeORM | Banco de dados |
-| BullMQ + Redis | Fila de jobs assíncronos |
-| Swagger | Documentação da API |
+O serviço implementa padrões de resiliência para lidar com essas instabilidades e processa **~1 milhão de usuários em ~18-20 minutos**.
 
-## Como rodar
+A aplicação é **facilmente deployável em AWS** utilizando serviços gerenciados como ECS Fargate, ElastiCache (Redis) e RDS PostgreSQL. Veja a arquitetura proposta em [docs/AWS_ARCHITECTURE.md](docs/AWS_ARCHITECTURE.md).
 
-### Pré-requisitos
+## Stack Tecnológica
 
-- Node.js 18+
-- Docker (para Redis)
+| Tecnologia | Justificativa |
+|------------|---------------|
+| **NestJS + Fastify** | Framework enterprise-grade, Fastify 2-3x mais rápido que Express |
+| **SQLite + TypeORM** | Zero configuração, banco em arquivo único |
+| **BullMQ + Redis** | Processamento assíncrono com retry automático |
+| **Swagger** | Documentação interativa da API |
 
-### Desenvolvimento local
+## Requisitos
+
+- **Node.js 18+**
+- **Docker** e **Docker Compose**
+
+---
+
+## Como Executar
+
+### Opção 1: Docker Compose (Recomendado)
+
+Sobe todos os serviços (API, Redis e Legacy API) com um comando:
 
 ```bash
+cd user-service
+
+# Usando Make
+make dev
+
+# Ou diretamente com docker-compose
+docker-compose -f docker/docker-compose.dev.yml up --build
+```
+
+### Opção 2: Desenvolvimento Local
+
+```bash
+cd user-service
+
 # 1. Suba o Redis
 docker run -d --name redis-local -p 6379:6379 redis:7-alpine
 
-# 2. Instale as dependências
+# 2. Suba a API Legada (em outro terminal)
+cd ../legacy-api/api
+cp env.example .env
+docker build -t api-legada .
+docker run -m 128m --network=host api-legada
+
+# 3. Instale dependências e rode o serviço
+cd ../../user-service
 npm install
-
-# 3. Configure o ambiente (opcional - já tem defaults)
 cp .env.example .env
-
-# 4. Rode em modo dev
 npm run start:dev
 ```
 
-### Com Docker Compose
+### Opção 3: Build de Produção
 
 ```bash
-docker-compose up --build
+cd user-service
+
+# Build da imagem
+docker build -t user-service -f docker/Dockerfile .
+
+# Executar (requer Redis e Legacy API rodando)
+docker run -m 128m -p 3000:3000 \
+  -e REDIS_HOST=host.docker.internal \
+  -e LEGACY_API_URL=http://host.docker.internal:3001 \
+  -e LEGACY_API_KEY=test-api-key-2024 \
+  user-service
 ```
 
-## URLs
+---
+
+## URLs de Acesso
 
 | URL | Descrição |
 |-----|-----------|
-| http://localhost:3000 | API |
+| http://localhost:3000 | API REST |
 | http://localhost:3000/api/docs | Swagger (documentação interativa) |
+| http://localhost:3001 | API Legada (para testes) |
 
-## Endpoints disponíveis
+---
 
-### Usuários
+## Endpoints da API
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/users` | Lista usuários (com paginação) |
-| GET | `/users/:user_name` | Busca por userName |
-| POST | `/users` | Cria usuário |
-| PUT | `/users/:id` | Atualiza usuário |
-| DELETE | `/users/:id` | Remove usuário (soft delete) |
-
-### Sincronização
+### Usuários (`/users`)
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| POST | `/sync` | Dispara sincronização com sistema legado |
-| GET | `/sync/status` | Status da última sync (com métricas de performance) |
-| GET | `/sync/history` | Lista histórico de sincronizações |
-| POST | `/sync/reset` | Reseta sync travada |
+| `GET` | `/users` | Lista usuários com paginação (`?page=1&limit=10`) |
+| `GET` | `/users/:user_name` | Busca por userName |
+| `GET` | `/users/export/csv` | Exporta CSV com filtros (`?created_from=&created_to=`) |
+| `POST` | `/users` | Cria usuário |
+| `PUT` | `/users/:id` | Atualiza usuário |
+| `DELETE` | `/users/:id` | Remove usuário (soft delete) |
 
-### Health Check
+### Sincronização (`/sync`)
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| GET | `/health` | Liveness probe (simples, para load balancers) |
-| GET | `/health/details` | Readiness probe com detalhes (para observabilidade) |
+| `POST` | `/sync` | Dispara sincronização com sistema legado |
+| `GET` | `/sync/status` | Status da última sync (com métricas) |
+| `GET` | `/sync/history` | Histórico de sincronizações |
+| `POST` | `/sync/reset` | Reseta sync travada |
 
-**Status possíveis:**
-- `healthy` - Todos os componentes OK
-- `degraded` - Componentes não-críticos com problema
-- `unhealthy` - Componentes críticos falharam (HTTP 503)
+### Health Check (`/health`)
 
-## Variáveis de ambiente
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/health` | Liveness probe (para load balancers) |
+| `GET` | `/health/details` | Readiness probe com status dos componentes |
 
-```env
-# Servidor
-PORT=3000
-NODE_ENV=development
+**Status possíveis:** `healthy`, `degraded`, `unhealthy` (HTTP 503)
 
-# Banco de dados
-DATABASE_PATH=./data/database.sqlite
-TYPEORM_LOGGING=false
+---
 
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
+## Variáveis de Ambiente
 
-# API Legada
-LEGACY_API_URL=http://localhost:3001
-LEGACY_API_KEY=test-api-key-2024
+| Variável | Obrigatório | Default | Descrição |
+|----------|-------------|---------|-----------|
+| `NODE_ENV` | Não | `development` | Ambiente (development, production, test) |
+| `PORT` | Não | `3000` | Porta do servidor |
+| `DATABASE_PATH` | Não | `./data/database.sqlite` | Caminho do SQLite |
+| `TYPEORM_LOGGING` | Não | `false` | Habilita logs SQL |
+| `REDIS_HOST` | **Sim** | - | Host do Redis |
+| `REDIS_PORT` | **Sim** | - | Porta do Redis |
+| `LEGACY_API_URL` | **Sim** | - | URL da API legada |
+| `LEGACY_API_KEY` | **Sim** | - | Chave de autenticação |
+| `SYNC_CRON_EXPRESSION` | Não | `0 */6 * * *` | Cron da sync (a cada 6h) |
+| `SYNC_RETRY_ATTEMPTS` | Não | `3` | Tentativas de retry HTTP |
+| `SYNC_RETRY_DELAY` | Não | `1000` | Delay inicial do retry (ms) |
+| `SYNC_BATCH_SIZE` | Não | `1000` | Usuários por batch |
+| `SYNC_WORKER_CONCURRENCY` | Não | `1` | Workers paralelos |
+| `SYNC_RETRY_DELAY_MS` | Não | `600000` | Delay para retry de sync falha (10 min) |
+| `RATE_LIMIT_TTL` | Não | `60` | Janela de rate limit (segundos) |
+| `RATE_LIMIT_MAX` | Não | `100` | Máximo de requests por janela |
 
-# Sincronização
-SYNC_CRON_EXPRESSION=0 */6 * * *
-SYNC_BATCH_SIZE=1000
-SYNC_WORKER_CONCURRENCY=1
-SYNC_RETRY_DELAY_MS=600000
-SYNC_RETRY_ATTEMPTS=3
-SYNC_RETRY_DELAY=1000
+Exemplo completo em [.env.example](.env.example).
 
-# Rate Limiting
-RATE_LIMIT_TTL=60
-RATE_LIMIT_MAX=100
-```
+---
 
-## Estrutura do projeto
+## Arquitetura do Projeto
 
 ```
 src/
-├── domain/           # Entidades e interfaces
-├── application/      # Serviços e DTOs
-├── infrastructure/   # Implementações (DB, HTTP, Queue)
-└── presentation/     # Controllers e filtros
+├── domain/           # Entidades e interfaces de repositório
+│   ├── entities/     # User, SyncLog
+│   └── repositories/ # Interfaces (contratos)
+├── application/      # Lógica de negócio
+│   ├── services/     # UserService, SyncService, HealthService
+│   └── dtos/         # Validação de entrada/saída
+├── infrastructure/   # Implementações técnicas
+│   ├── config/       # Validação de env vars
+│   ├── legacy/       # Cliente da API legada
+│   ├── queue/        # Processadores BullMQ
+│   ├── repositories/ # Implementações TypeORM
+│   └── resilience/   # Circuit breaker, retry
+└── presentation/     # Camada HTTP
+    ├── controllers/  # REST endpoints
+    └── filters/      # Tratamento de erros
 ```
 
-## Documentação adicional
+---
 
-| Documento | Descrição |
-|-----------|-----------|
-| [docs/TECHNICAL_IMPLEMENTATION.md](docs/TECHNICAL_IMPLEMENTATION.md) | Como cada parte foi implementada |
-| [.ai/CONTEXT.md](.ai/CONTEXT.md) | Contexto para desenvolvimento com IA |
-| [.ai/roadmap.md](.ai/roadmap.md) | Status das fases de desenvolvimento |
-| [CHANGELOG.md](CHANGELOG.md) | Histórico de mudanças |
+## Padrões de Resiliência
 
-## Scripts disponíveis
+O serviço implementa múltiplos padrões para lidar com a instabilidade da API legada:
+
+| Padrão | Implementação |
+|--------|---------------|
+| **Retry com Backoff** | 100ms → 500ms (max 10 tentativas) |
+| **Circuit Breaker** | Abre após 5 falhas, recupera em 30s |
+| **Parser Tolerante** | Ignora JSON corrompido e continua |
+| **Retry Queue** | Agenda retry em 10min se sync falhar |
+| **Timeout de Sync** | Marca como FAILED após 30min |
+| **Recovery no Startup** | Reseta syncs órfãs ao iniciar |
+
+---
+
+## Performance
+
+O sistema foi otimizado para processar grandes volumes:
+
+| Métrica | Valor |
+|---------|-------|
+| Throughput | ~800-850 registros/segundo |
+| 1M usuários | ~18-20 minutos |
+| Batch size | 1000 usuários |
+| Retry delay | 100-500ms |
+
+**Otimizações aplicadas:**
+- Streaming HTTP (não carrega tudo em memória)
+- Bulk Upsert com Raw SQL (`INSERT ... ON CONFLICT`)
+- Non-blocking batch processing
+- Deduplicação por `user_name` usando `legacy_created_at`
+
+---
+
+## Makefile
+
+Comandos disponíveis para facilitar o desenvolvimento:
+
+```bash
+make dev         # Docker Compose com hot reload
+make stop        # Para containers
+make logs        # Logs do container api
+make clean       # Remove containers e dados
+make build       # Build de produção
+make test        # Roda testes
+make lint        # Verifica código
+make help        # Lista todos os comandos
+```
+
+---
+
+## Scripts NPM
 
 ```bash
 npm run start:dev    # Desenvolvimento com hot reload
 npm run build        # Build de produção
-npm run start:prod   # Roda build de produção
-npm run lint         # Verifica código
-npm run test         # Roda testes
+npm run start:prod   # Executa build compilado
+npm run lint         # Verifica e corrige código
+npm run test         # Testes unitários
+npm run test:cov     # Testes com coverage
+npm run test:e2e     # Testes end-to-end
 ```
 
-## Resiliência
+---
 
-O serviço implementa padrões de resiliência para lidar com a instabilidade da API legada:
+## Testando a API
 
-- **Retry rápido**: Tenta novamente em caso de falha (100ms → 500ms max)
-- **Circuit Breaker**: Bloqueia requisições temporariamente após 5 falhas consecutivas
-- **Parser tolerante**: Ignora JSON corrompido e continua processando o resto
-- **Retry Queue**: Se o sync falhar completamente, agenda retry automático em 10 minutos
+### 1. Disparar Sincronização
 
-## Performance
+```bash
+curl -X POST http://localhost:3000/sync
+```
 
-O sistema de sincronização foi otimizado para processar **1 milhão de usuários em ~18-20 minutos** (~800-850 reg/s):
+### 2. Verificar Status
 
-| Otimização | Descrição |
-|------------|-----------|
-| Streaming HTTP | Processa dados conforme chegam, sem carregar tudo em memória |
-| Bulk Upsert com Raw SQL | INSERT com ON CONFLICT direto no SQLite |
-| Retry rápido | Delays de 100-500ms ao invés de segundos |
-| Batch Processing | Batches de 1000 usuários processados via BullMQ |
-| Non-blocking callbacks | Enfileira batches sem bloquear o stream |
+```bash
+curl http://localhost:3000/sync/status
+```
 
-## Status do desenvolvimento
+### 3. Listar Usuários
 
-- [x] Fase 1: Setup do projeto
-- [x] Fase 2: Entidades e repositórios
-- [x] Fase 3: CRUD de usuários
-- [x] Fase 4: Cliente do sistema legado
-- [x] Fase 5: Sincronização com BullMQ
-- [x] Fase 6: Exportação CSV
-- [x] Fase 6.5: Refatoração ConfigModule
-- [x] Fase 7: Qualidade e Observabilidade (Health check, Swagger)
-- [ ] Fase 8: Testes unitários e de integração
+```bash
+curl "http://localhost:3000/users?page=1&limit=10"
+```
+
+### 4. Buscar por Username
+
+```bash
+curl http://localhost:3000/users/john_doe
+```
+
+### 5. Exportar CSV
+
+```bash
+curl "http://localhost:3000/users/export/csv?created_from=2024-01-01" > users.csv
+```
+
+### 6. Health Check
+
+```bash
+curl http://localhost:3000/health/details
+```
+
+---
+
+## Documentação Adicional
+
+| Documento | Descrição |
+|-----------|-----------|
+| [docs/TECHNICAL_IMPLEMENTATION.md](docs/TECHNICAL_IMPLEMENTATION.md) | Detalhes de implementação fase a fase |
+| [docs/AWS_ARCHITECTURE.md](docs/AWS_ARCHITECTURE.md) | Arquitetura proposta para deploy AWS |
+| [CHANGELOG.md](CHANGELOG.md) | Histórico de mudanças |
+
+---
+
+## Checklist do Teste Técnico
+
+### Requisitos Essenciais
+
+- [x] Endpoint de sincronização idempotente (`POST /sync`)
+- [x] Tratamento de erros do sistema legado (retry, circuit breaker)
+- [x] Deduplicação por `user_name` (usando `created_at` mais recente)
+- [x] CRUD completo de usuários
+- [x] Busca por `user_name` (`GET /users/:user_name`)
+- [x] Exportação CSV com filtros (`GET /users/export/csv`)
+- [x] Soft delete (todos endpoints retornam apenas `deleted=false`)
+- [x] Estrutura DDD (Domain, Application, Infrastructure, Presentation)
+- [x] Docker funcional com limite de memória
+- [x] Documentação AWS
+
+### Diferenciais Implementados
+
+- [x] Documentação Swagger completa
+- [x] Rate limiting
+- [x] Health check com detalhes
+- [x] Métricas de performance
+- [ ] Testes automatizados (pendente)
+
+---
+
+## Decisões Técnicas
+
+### Por que NestJS + Fastify?
+
+- Framework maduro com suporte a DI, módulos e decorators
+- Fastify é mais performático que Express (importante para alto throughput)
+- Ecossistema rico (TypeORM, BullMQ, Swagger)
+
+### Por que SQLite?
+
+- Zero configuração (banco em arquivo)
+- Suficiente para o escopo do teste
+- Fácil migração para PostgreSQL/MySQL se necessário
+
+### Por que BullMQ + Redis?
+
+- Processamento assíncrono com retry automático
+- Visibilidade do estado dos jobs
+- Escalável (múltiplos workers)
+
+### Por que Streaming?
+
+- Não carrega 1M registros em memória
+- Processa dados conforme chegam
+- Essencial para rodar com limite de 128MB
+
+---
+
+## Contato
+
+**Bruno Xavier**
+- Site: https://brunoxavier.com.br
+- Email: bruno@brunoxavier.com.br
