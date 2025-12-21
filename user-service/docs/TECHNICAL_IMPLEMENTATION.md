@@ -967,5 +967,15 @@ Ainda falta:
 - **Testes**: Unitários e de integração
   - Coverage > 70%
 
-- **Documentação final**:
-  - docs/AWS_ARCHITECTURE.md
+---
+
+## Arquitetura AWS
+
+A arquitetura proposta para deploy em ambiente AWS está documentada em [AWS_ARCHITECTURE.md](./AWS_ARCHITECTURE.md).
+
+O documento pode ser usado como contexto para futuras melhorias, incluindo:
+
+- Migração de BullMQ para SQS
+- Migração de SQLite para RDS PostgreSQL
+- Deploy do sync processor como ECS Fargate Task
+- Extração dos workers para Lambda

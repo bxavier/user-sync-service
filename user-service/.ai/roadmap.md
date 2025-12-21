@@ -21,7 +21,7 @@
 | 6 | ✅ Concluído | Exportação CSV |
 | 6.5 | ✅ Concluído | Refatoração ConfigModule |
 | 7 | 🔄 Em andamento | Qualidade e Observabilidade |
-| 8 | Pendente | Documentação e Entrega |
+| 8 | 🔄 Em andamento | Documentação e Entrega |
 
 ---
 
@@ -185,11 +185,11 @@ Coverage > 70%, Swagger documentando todos endpoints
 ---
 
 ## Fase 8: Documentação e Entrega
-**Status**: Pendente
+**Status**: Em andamento
 
 ### Tarefas
 - [ ] `README.md` completo
-- [ ] `docs/AWS_ARCHITECTURE.md`
+- [x] `docs/AWS_ARCHITECTURE.md`
 - [ ] `docs/OPTIMIZATIONS.md`
 - [ ] `CHANGELOG.md` atualizado
 - [ ] Revisão final de código

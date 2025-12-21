@@ -14,6 +14,24 @@
 
 **IMPORTANTE**: Além de ler, você DEVE manter estes arquivos atualizados ao concluir tarefas.
 
+## Premissas da API Legada
+
+A API legada possui características que impactam diretamente as decisões de arquitetura:
+
+| Característica | Valor | Impacto |
+|----------------|-------|---------|
+| **Paginação** | Não suporta | Não é possível buscar usuários em partes |
+| **Formato de resposta** | Streaming JSON concatenado | Cada objeto JSON é enviado separadamente |
+| **Volume de dados** | ~1M usuários | Streaming completo leva ~18-20 min |
+| **Cursor/Offset** | Não suporta | Não é possível retomar de onde parou |
+| **Autenticação** | API Key no header | `X-API-Key: {LEGACY_API_KEY}` |
+
+**Implicações para arquitetura AWS:**
+- Lambda (15 min timeout) **não funciona** para orquestrar o streaming completo
+- Necessário usar **ECS Task** (sem timeout) para o orchestrator
+- Não é possível dividir o streaming em chunks menores
+- Se a conexão cair, o processo precisa recomeçar do zero
+
 ## Status Atual
 
 **Fase 1 (Setup)**: Concluída
@@ -21,7 +39,7 @@
 - NestJS + Fastify configurado
 - TypeORM + SQLite configurado
 - BullMQ + Redis configurado
-- Docker + docker-compose configurado
+- Docker + Makefile configurado (docker-compose apenas para dev)
 - Estrutura DDD criada
 - LoggerService customizado (estende ConsoleLogger do NestJS)
 - TypeORM logger integrado ao formato NestJS
@@ -104,6 +122,14 @@
 
 - [ ] Testes unitários
 - [ ] Testes de integração
+- [ ] `README.md` completo
+- [ ] `docs/OPTIMIZATIONS.md`
+- [ ] `CHANGELOG.md` atualizado
+- [ ] Revisão final de código
+
+## Tarefas Concluídas (Fase 8)
+
+- [x] `docs/AWS_ARCHITECTURE.md` - Arquitetura mínima viável para AWS (ECS Fargate, RDS, ElastiCache)
 
 ## Arquivos Principais do Projeto
 
@@ -174,8 +200,12 @@ user-service/
 │       └── filters/
 │           ├── index.ts
 │           └── http-exception.filter.ts # HttpExceptionFilter global
+├── docker/
+│   ├── Dockerfile                       # Imagem de produção (multi-stage)
+│   ├── Dockerfile.dev                   # Imagem de desenvolvimento (hot reload)
+│   └── docker-compose.dev.yml           # Docker Compose apenas para dev
 ├── .env                                 # Variáveis de ambiente
-├── docker-compose.yml
+├── Makefile                             # Comandos: make dev, make stop, make build
 └── package.json
 ```
 
@@ -203,14 +233,26 @@ user-service/
 ## Como Rodar
 
 ```bash
-# Redis (em container separado)
-docker run -d --name redis-local -p 6379:6379 redis:7-alpine
+# Com Docker (recomendado) - sobe API, Redis e Legacy API
+make dev
 
-# Desenvolvimento local (recomendado)
+# Ou sem Docker (requer Redis rodando)
+docker run -d --name redis-local -p 6379:6379 redis:7-alpine
 npm run start:dev
 
 # Swagger disponível em: http://localhost:3000/api/docs
 ```
+
+### Comandos do Makefile
+
+| Comando       | Descrição                              |
+| ------------- | -------------------------------------- |
+| `make dev`    | Inicia em modo desenvolvimento         |
+| `make stop`   | Para todos os containers               |
+| `make logs`   | Mostra logs (follow mode)              |
+| `make build`  | Builda imagem de produção              |
+| `make clean`  | Remove containers, volumes e dados     |
+| `make help`   | Lista todos os comandos disponíveis    |
 
 ## Fluxo de Desenvolvimento
 

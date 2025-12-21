@@ -568,3 +568,51 @@ Documentar todos os endpoints com decorators do NestJS/Swagger e adicionar metad
 - Swagger UI funciona como playground interativo
 - Facilita integração por outros times
 - Documentação sempre atualizada junto com o código
+
+---
+
+## TDR-015: Docker Compose Apenas para Desenvolvimento
+
+**Data**: 2025-12-21
+**Status**: Aprovado
+
+### Contexto
+
+Docker Compose é uma ferramenta de orquestração local, não recomendada para ambientes de produção.
+
+### Decisão
+
+Usar `docker-compose` apenas para desenvolvimento local. Produção deve usar orquestradores apropriados.
+
+### Estrutura
+
+```
+docker/
+├── Dockerfile          # Imagem de produção (multi-stage, otimizada)
+├── Dockerfile.dev      # Imagem de desenvolvimento (com hot reload)
+└── docker-compose.dev.yml  # Apenas para desenvolvimento local
+```
+
+### Comandos (via Makefile)
+
+| Comando      | Descrição                          |
+| ------------ | ---------------------------------- |
+| `make dev`   | Inicia em modo desenvolvimento     |
+| `make build` | Builda imagem de produção          |
+| `make stop`  | Para containers                    |
+| `make clean` | Remove containers, volumes, dados  |
+
+### Alternativas para Produção
+
+| Ambiente        | Ferramenta Recomendada                   |
+| --------------- | ---------------------------------------- |
+| AWS ECS/Fargate | Task Definitions + Service              |
+| Kubernetes      | Deployments + Services (kubectl/Helm)    |
+| Docker Swarm    | `docker stack deploy`                    |
+| AWS Lambda      | Não usa container (ou container image)   |
+
+### Justificativa
+
+- Docker Compose não oferece: auto-scaling, rolling updates, health check recovery, load balancing nativo
+- ECS Fargate (arquitetura documentada em `docs/AWS_ARCHITECTURE.md`) oferece todos esses recursos
+- Manter apenas `docker-compose.dev.yml` evita confusão sobre o que usar em produção
