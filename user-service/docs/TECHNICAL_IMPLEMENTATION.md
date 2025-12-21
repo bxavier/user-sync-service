@@ -16,12 +16,14 @@ Este documento explica, passo a passo, como cada parte do User Service foi imple
 8. [Fase 6.5: Refatoração ConfigModule](#fase-65-refatoração-configmodule)
 9. [Fase 7: Otimizações de Performance](#fase-7-otimizações-de-performance)
 10. [Fase 8: Health Check e Observabilidade](#fase-8-health-check-e-observabilidade)
+11. [Fase 9: Documentação Swagger](#fase-9-documentação-swagger)
 
 ---
 
 ## Sobre o Projeto
 
 O User Service é um serviço que:
+
 - Busca dados de usuários de uma API legada (que falha bastante)
 - Guarda esses dados em um banco próprio
 - Disponibiliza endpoints REST para consulta e manipulação
@@ -30,12 +32,12 @@ A API legada é instável de propósito - ela simula erros 500, rate limiting, J
 
 ### Stack escolhida
 
-| O quê | Por quê |
-|-------|---------|
+| O quê            | Por quê                                              |
+| ---------------- | ---------------------------------------------------- |
 | NestJS + Fastify | Framework robusto, Fastify é mais rápido que Express |
-| SQLite + TypeORM | Simples pra rodar local, TypeORM facilita queries |
-| BullMQ + Redis | Fila de jobs com retry automático |
-| Swagger | Documentação da API que já funciona como playground |
+| SQLite + TypeORM | Simples pra rodar local, TypeORM facilita queries    |
+| BullMQ + Redis   | Fila de jobs com retry automático                    |
+| Swagger          | Documentação da API que já funciona como playground  |
 
 ---
 
@@ -92,6 +94,7 @@ Criamos as entidades (tabelas) e os repositórios (camada de acesso a dados).
 **1. Entidade User**
 
 Representa um usuário. Campos importantes:
+
 - `legacyId`: ID do usuário no sistema legado (pra gente saber de onde veio)
 - `userName`: nome único do usuário
 - `deleted` / `deletedAt`: soft delete (não apagamos de verdade, só marcamos)
@@ -99,6 +102,7 @@ Representa um usuário. Campos importantes:
 **2. Entidade SyncLog**
 
 Registra cada execução de sincronização. Assim sabemos:
+
 - Quando rodou
 - Quanto tempo levou
 - Quantos usuários processou
@@ -109,6 +113,7 @@ Registra cada execução de sincronização. Assim sabemos:
 Seguimos o padrão de criar uma interface primeiro (`UserRepository`) e depois a implementação (`UserRepositoryImpl`). Isso facilita testes e troca de implementação.
 
 O método mais importante é o `upsertByLegacyId`:
+
 - Se o usuário já existe (pelo legacyId), atualiza
 - Se não existe, cria
 - Só atualiza se o dado novo for mais recente que o existente
@@ -180,13 +185,13 @@ O `HttpExceptionFilter` captura erros e retorna uma resposta padronizada:
 
 ### Endpoints disponíveis
 
-| Método | Rota | O que faz |
-|--------|------|-----------|
-| GET | `/users` | Lista usuários (com paginação) |
-| GET | `/users/:user_name` | Busca por userName |
-| POST | `/users` | Cria usuário |
-| PUT | `/users/:id` | Atualiza usuário |
-| DELETE | `/users/:id` | Remove usuário (soft delete) |
+| Método | Rota                | O que faz                      |
+| ------ | ------------------- | ------------------------------ |
+| GET    | `/users`            | Lista usuários (com paginação) |
+| GET    | `/users/:user_name` | Busca por userName             |
+| POST   | `/users`            | Cria usuário                   |
+| PUT    | `/users/:id`        | Atualiza usuário               |
+| DELETE | `/users/:id`        | Remove usuário (soft delete)   |
 
 ### Arquivos principais
 
@@ -218,6 +223,7 @@ Criamos o cliente HTTP para buscar dados da API legada, com toda a resiliência 
 **1. LegacyApiClient**
 
 Cliente HTTP usando axios. Configuração via variáveis de ambiente:
+
 - `LEGACY_API_URL`: URL base da API
 - `LEGACY_API_KEY`: Chave de autenticação
 
@@ -234,6 +240,7 @@ O método `extractArrays()` no `LegacyApiClient` sabe lidar com isso. Ele també
 **3. Retry rápido (otimizado)**
 
 Quando a requisição falha (erro 500, 429, etc), tentamos de novo com delays curtos:
+
 - `initialDelayMs: 100` - começa com 100ms
 - `maxDelayMs: 500` - máximo de 500ms
 - `backoffMultiplier: 1.5` - cresce devagar
@@ -244,6 +251,7 @@ Isso é crucial porque a API legada tem 40% de chance de erro no início de cada
 **4. Circuit Breaker**
 
 Se a API falhar muitas vezes seguidas (5 vezes), o circuit breaker "abre" e bloqueia novas requisições por 30 segundos. Isso:
+
 - Dá tempo pra API legada se recuperar
 - Evita que nosso serviço fique travado esperando
 
@@ -282,6 +290,7 @@ A sincronização usa uma arquitetura distribuída para processar 1 milhão de u
 **1. Arquitetura de Filas**
 
 Duas filas BullMQ:
+
 - `user-sync`: Recebe o job principal (orquestrador)
 - `user-sync-batch`: Recebe jobs de batch (1000 usuários cada)
 
@@ -310,6 +319,7 @@ Processa batches em paralelo (concurrency: 5):
 **4. SyncService**
 
 Serviço com a lógica de negócio:
+
 - `triggerSync()`: Verifica idempotência e enfileira job
 - `getLatestSync()`: Retorna última sincronização
 - `getSyncHistory()`: Lista histórico
@@ -319,12 +329,12 @@ Serviço com a lógica de negócio:
 
 Endpoints:
 
-| Método | Rota | O que faz |
-|--------|------|-----------|
-| POST | `/sync` | Dispara sincronização |
-| GET | `/sync/status` | Status da última sync (com métricas) |
-| GET | `/sync/history` | Lista histórico |
-| POST | `/sync/reset` | Reseta sync travada |
+| Método | Rota            | O que faz                            |
+| ------ | --------------- | ------------------------------------ |
+| POST   | `/sync`         | Dispara sincronização                |
+| GET    | `/sync/status`  | Status da última sync (com métricas) |
+| GET    | `/sync/history` | Lista histórico                      |
+| POST   | `/sync/reset`   | Reseta sync travada                  |
 
 ### Garantias implementadas
 
@@ -365,6 +375,7 @@ Implementamos exportação de usuários em formato CSV com streaming para suport
 **1. Endpoint de Exportação**
 
 `GET /users/export/csv` com suporte a filtros:
+
 - `created_from`: Data inicial (ISO 8601)
 - `created_to`: Data final (ISO 8601)
 
@@ -491,7 +502,7 @@ Todos os módulos agora usam `forRootAsync` com `ConfigService`:
 // Antes (ruim)
 TypeOrmModule.forRoot({
   host: process.env.DATABASE_PATH,
-})
+});
 
 // Depois (bom)
 TypeOrmModule.forRootAsync({
@@ -499,10 +510,11 @@ TypeOrmModule.forRootAsync({
   useFactory: (config: ConfigService) => ({
     database: config.get('DATABASE_PATH'),
   }),
-})
+});
 ```
 
 Módulos migrados:
+
 - TypeOrmModule
 - BullModule
 - ThrottlerModule
@@ -562,7 +574,10 @@ export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
 
   constructor(configService: ConfigService) {
     super();
-    this.workerConcurrency = configService.get<number>('SYNC_WORKER_CONCURRENCY', 20);
+    this.workerConcurrency = configService.get<number>(
+      'SYNC_WORKER_CONCURRENCY',
+      1,
+    );
   }
 
   onModuleInit() {
@@ -574,6 +589,7 @@ export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
 **6. DTOs Centralizados**
 
 Criamos DTOs para todas as respostas de sync:
+
 - `SyncStatusDto`: Status com métricas (recordsPerSecond, progressPercent, etc.)
 - `TriggerSyncResponseDto`: Resposta do POST /sync
 - `ResetSyncResponseDto`: Resposta do POST /sync/reset
@@ -604,24 +620,24 @@ src/
 
 Todas as variáveis são validadas no startup via `class-validator`. A aplicação não inicia se variáveis obrigatórias estiverem faltando.
 
-| Variável | Obrigatório | Default | Descrição |
-|----------|-------------|---------|-----------|
-| `NODE_ENV` | Não | development | Ambiente (development, production, test) |
-| `PORT` | Não | 3000 | Porta do servidor |
-| `DATABASE_PATH` | Não | ./data/database.sqlite | Caminho do banco SQLite |
-| `TYPEORM_LOGGING` | Não | true | Habilita logs SQL |
-| `REDIS_HOST` | **Sim** | - | Host do Redis |
-| `REDIS_PORT` | **Sim** | - | Porta do Redis |
-| `LEGACY_API_URL` | **Sim** | - | URL da API legada |
-| `LEGACY_API_KEY` | **Sim** | - | Chave de autenticação |
-| `SYNC_BATCH_SIZE` | Não | 1000 | Usuários por batch |
-| `SYNC_WORKER_CONCURRENCY` | Não | 1 | Workers paralelos |
-| `SYNC_CRON_EXPRESSION` | Não | `0 */6 * * *` | Cron da sync (a cada 6h) |
-| `SYNC_RETRY_ATTEMPTS` | Não | 3 | Tentativas de retry HTTP |
-| `SYNC_RETRY_DELAY` | Não | 1000 | Delay inicial do retry HTTP (ms) |
-| `SYNC_RETRY_DELAY_MS` | Não | 600000 | Delay para retry de sync falha (10 min) |
-| `RATE_LIMIT_TTL` | Não | 60 | TTL do rate limiting (s) |
-| `RATE_LIMIT_MAX` | Não | 100 | Max requests por TTL |
+| Variável                  | Obrigatório | Default                | Descrição                                |
+| ------------------------- | ----------- | ---------------------- | ---------------------------------------- |
+| `NODE_ENV`                | Não         | development            | Ambiente (development, production, test) |
+| `PORT`                    | Não         | 3000                   | Porta do servidor                        |
+| `DATABASE_PATH`           | Não         | ./data/database.sqlite | Caminho do banco SQLite                  |
+| `TYPEORM_LOGGING`         | Não         | true                   | Habilita logs SQL                        |
+| `REDIS_HOST`              | **Sim**     | -                      | Host do Redis                            |
+| `REDIS_PORT`              | **Sim**     | -                      | Porta do Redis                           |
+| `LEGACY_API_URL`          | **Sim**     | -                      | URL da API legada                        |
+| `LEGACY_API_KEY`          | **Sim**     | -                      | Chave de autenticação                    |
+| `SYNC_BATCH_SIZE`         | Não         | 1000                   | Usuários por batch                       |
+| `SYNC_WORKER_CONCURRENCY` | Não         | 1                      | Workers paralelos                        |
+| `SYNC_CRON_EXPRESSION`    | Não         | `0 */6 * * *`          | Cron da sync (a cada 6h)                 |
+| `SYNC_RETRY_ATTEMPTS`     | Não         | 3                      | Tentativas de retry HTTP                 |
+| `SYNC_RETRY_DELAY`        | Não         | 1000                   | Delay inicial do retry HTTP (ms)         |
+| `SYNC_RETRY_DELAY_MS`     | Não         | 600000                 | Delay para retry de sync falha (10 min)  |
+| `RATE_LIMIT_TTL`          | Não         | 60                     | TTL do rate limiting (s)                 |
+| `RATE_LIMIT_MAX`          | Não         | 100                    | Max requests por TTL                     |
 
 Exemplo de `.env`:
 
@@ -698,6 +714,7 @@ console.log(`[DB] bulkUpsert: ${totalMs}ms`);
 ```
 
 Os logs mostraram que:
+
 - **Parse e DB**: Instantâneo (0-4ms)
 - **Retry HTTP**: Delays de 2-30 segundos por erro (40% de taxa de erro)
 
@@ -768,13 +785,14 @@ await this.retryQueue.add(SYNC_RETRY_JOB_NAME, jobData, {
 
 ### Resultado
 
-| Métrica | Antes | Depois |
-|---------|-------|--------|
-| Throughput | ~170 reg/s | ~800-850 reg/s |
-| Tempo para 1M | ~83 minutos | ~18-20 minutos |
-| Retry delay | 2-30 segundos | 100-500ms |
+| Métrica       | Antes         | Depois         |
+| ------------- | ------------- | -------------- |
+| Throughput    | ~170 reg/s    | ~800-850 reg/s |
+| Tempo para 1M | ~83 minutos   | ~18-20 minutos |
+| Retry delay   | 2-30 segundos | 100-500ms      |
 
 O throughput está próximo do limite teórico da API legada (~1000 reg/s), considerando:
+
 - API envia 100 reg a cada 100ms = 1000 reg/s
 - 40% de taxa de erro (20% 500 + 20% 429)
 - 20% de dados corrompidos ignorados
@@ -809,10 +827,10 @@ Implementamos health checks robustos para observabilidade com ferramentas como D
 
 **1. Dois endpoints de health check**
 
-| Endpoint | Propósito | Rate Limit |
-|----------|-----------|------------|
-| `GET /health` | Liveness probe (load balancers, Kubernetes) | Global (100 req/min) |
-| `GET /health/details` | Readiness probe (observabilidade) | Restritivo (10 req/min) |
+| Endpoint              | Propósito                                   | Rate Limit              |
+| --------------------- | ------------------------------------------- | ----------------------- |
+| `GET /health`         | Liveness probe (load balancers, Kubernetes) | Global (100 req/min)    |
+| `GET /health/details` | Readiness probe (observabilidade)           | Restritivo (10 req/min) |
 
 **2. HealthService**
 
@@ -895,6 +913,53 @@ src/
 
 ---
 
+## Fase 9: Documentação Swagger
+
+**Status**: Concluído
+
+### O que fizemos
+
+Finalizamos a documentação Swagger com metadata completa.
+
+**1. swagger.config.ts**
+
+Adicionamos informações de contato e licença:
+
+```typescript
+const config = new DocumentBuilder()
+  .setTitle('User Service API')
+  .setDescription('API for user management and legacy system synchronization')
+  .setVersion('1.0')
+  .setContact(
+    'Bruno Xavier',
+    'https://brunoxavier.com.br',
+    'bruno@brunoxavier.com.br',
+  )
+  .setLicense('MIT', 'https://opensource.org/licenses/MIT')
+  .addTag('users', 'User management endpoints')
+  .addTag('sync', 'Synchronization endpoints')
+  .addTag('health', 'Health check endpoints')
+  .build();
+```
+
+**2. DTOs documentados**
+
+Todos os DTOs têm `@ApiProperty` com:
+
+- `description` - o que o campo representa
+- `example` - valor de exemplo
+- `nullable` - quando aplicável
+
+**3. Endpoints documentados**
+
+Todos os endpoints têm:
+
+- `@ApiOperation` - descrição da operação
+- `@ApiResponse` - respostas possíveis
+- `@ApiParam` - parâmetros de path
+
+---
+
 ## Próximos Passos
 
 Ainda falta:
@@ -904,4 +969,3 @@ Ainda falta:
 
 - **Documentação final**:
   - docs/AWS_ARCHITECTURE.md
-  - Revisão final de código

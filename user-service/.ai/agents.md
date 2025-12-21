@@ -232,14 +232,14 @@ docker-compose up --build
 ## Entregáveis
 
 ### Obrigatórios
-- [ ] Código-fonte em repositório Git
-- [ ] `README.md` com instruções
-- [ ] `Dockerfile` funcional (limite 128MB)
+- [x] Código-fonte em repositório Git
+- [x] `README.md` com instruções
+- [x] `Dockerfile` funcional (limite 128MB)
 - [ ] `docs/AWS_ARCHITECTURE.md`
 
 ### Diferenciais
 - [ ] Testes unitários e de integração
-- [ ] Documentação Swagger/OpenAPI
-- [ ] Rate limiting
-- [ ] Health check endpoint
+- [x] Documentação Swagger/OpenAPI (contact, license, DTOs documentados)
+- [x] Rate limiting (ThrottlerModule)
+- [x] Health check endpoint (`/health`, `/health/details`)
 - [ ] `docs/OPTIMIZATIONS.md`

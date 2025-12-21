@@ -7,6 +7,13 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+## [0.7.2] - 2025-12-21
+
+### Changed
+- Swagger documentado com contact (Bruno Xavier), license (MIT)
+
+---
+
 ## [0.7.1] - 2025-12-21
 
 ### Added

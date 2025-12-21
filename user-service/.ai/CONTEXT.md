@@ -4,12 +4,15 @@
 
 ## Instrução para o Assistente
 
-Leia os seguintes arquivos de contexto antes de continuar o desenvolvimento:
+**OBRIGATÓRIO**: Leia os seguintes arquivos antes de continuar o desenvolvimento:
 
 1. `.ai/agents.md` - Visão geral, endpoints, regras de negócio, padrões de código
 2. `.ai/roadmap.md` - Fases de desenvolvimento e status atual
 3. `.ai/architecture.md` - Arquitetura e fluxos
 4. `.ai/tech-decisions.md` - Decisões técnicas tomadas
+5. `.env` - Variáveis de ambiente atuais (valores reais em uso)
+
+**IMPORTANTE**: Além de ler, você DEVE manter estes arquivos atualizados ao concluir tarefas.
 
 ## Status Atual
 
@@ -53,7 +56,7 @@ Leia os seguintes arquivos de contexto antes de continuar o desenvolvimento:
 
 - [x] Configurar BullMQ Queue (`SYNC_QUEUE_NAME`, `SYNC_BATCH_QUEUE_NAME`)
 - [x] Criar `SyncProcessor` (orquestrador - recebe streaming e enfileira batches)
-- [x] Criar `SyncBatchProcessor` (worker - processa batches em paralelo, concurrency: 20)
+- [x] Criar `SyncBatchProcessor` (worker - processa batches em paralelo, concurrency configurável)
 - [x] Lógica de deduplicação por `userName` (via `bulkUpsertByUserName`)
 - [x] Histórico/log de execuções (SyncLog com status PROCESSING)
 - [x] Endpoint `POST /sync`
@@ -61,7 +64,7 @@ Leia os seguintes arquivos de contexto antes de continuar o desenvolvimento:
 - [x] Cron job para sync periódico (a cada 6 horas, configurável)
 - [x] Garantir idempotência (verifica se já existe sync PENDING/RUNNING/PROCESSING)
 - [x] Streaming real com axios (`responseType: 'stream'`)
-- [x] Batch processing (2000 usuários por job) para suportar 1M+ registros (~18 min)
+- [x] Batch processing (configurável via `SYNC_BATCH_SIZE`) para suportar 1M+ registros
 - [x] **Recuperação de syncs travadas**:
   - Timeout automático: syncs em andamento há mais de 30 min são marcadas como FAILED
   - Recovery no startup: syncs órfãs são marcadas como FAILED ao reiniciar a aplicação
@@ -93,13 +96,12 @@ Leia os seguintes arquivos de contexto antes de continuar o desenvolvimento:
   - Readiness probe detalhado (`/health/details`) para observabilidade
   - Verifica: Database, Redis, API Legada, Sistema (memória, CPU, uptime), Filas
   - Rate limit restritivo no endpoint detalhado (10 req/min)
-- [ ] Swagger completo
+- [x] Swagger documentado (contact, license, DTOs com @ApiProperty, endpoints com @ApiOperation/@ApiResponse)
 - [ ] Testes unitários
 - [ ] Testes de integração
 
 ## Tarefas Pendentes
 
-- [ ] Swagger completo
 - [ ] Testes unitários
 - [ ] Testes de integração
 
@@ -179,23 +181,24 @@ user-service/
 
 ## Variáveis de Ambiente
 
-| Variável | Obrigatório | Default | Descrição |
-|----------|-------------|---------|-----------|
-| `NODE_ENV` | Não | `development` | Ambiente (development/production/test) |
-| `PORT` | Não | `3000` | Porta da aplicação |
-| `DATABASE_PATH` | Não | `./data/database.sqlite` | Caminho do SQLite |
-| `TYPEORM_LOGGING` | Não | `true` | Habilita logs do TypeORM |
-| `REDIS_HOST` | **Sim** | - | Host do Redis |
-| `REDIS_PORT` | **Sim** | - | Porta do Redis |
-| `LEGACY_API_URL` | **Sim** | - | URL da API legada |
-| `LEGACY_API_KEY` | **Sim** | - | Chave de autenticação da API legada |
-| `SYNC_CRON_EXPRESSION` | Não | `0 */6 * * *` | Expressão cron para sync automática |
-| `SYNC_RETRY_ATTEMPTS` | Não | `3` | Tentativas de retry |
-| `SYNC_RETRY_DELAY` | Não | `1000` | Delay (ms) entre retries |
-| `SYNC_BATCH_SIZE` | Não | `2000` | Usuários por batch |
-| `SYNC_WORKER_CONCURRENCY` | Não | `20` | Workers paralelos |
-| `RATE_LIMIT_TTL` | Não | `60` | TTL do rate limit (segundos) |
-| `RATE_LIMIT_MAX` | Não | `100` | Máximo de requests por TTL |
+| Variável                  | Obrigatório | Default                  | Valor Atual              | Descrição                              |
+| ------------------------- | ----------- | ------------------------ | ------------------------ | -------------------------------------- |
+| `NODE_ENV`                | Não         | `development`            | `development`            | Ambiente (development/production/test) |
+| `PORT`                    | Não         | `3000`                   | `3000`                   | Porta da aplicação                     |
+| `DATABASE_PATH`           | Não         | `./data/database.sqlite` | `./data/database.sqlite` | Caminho do SQLite                      |
+| `TYPEORM_LOGGING`         | Não         | `true`                   | `false`                  | Habilita logs do TypeORM               |
+| `REDIS_HOST`              | **Sim**     | -                        | `localhost`              | Host do Redis                          |
+| `REDIS_PORT`              | **Sim**     | -                        | `6379`                   | Porta do Redis                         |
+| `LEGACY_API_URL`          | **Sim**     | -                        | `http://localhost:3001`  | URL da API legada                      |
+| `LEGACY_API_KEY`          | **Sim**     | -                        | `test-api-key-2024`      | Chave de autenticação da API legada    |
+| `SYNC_CRON_EXPRESSION`    | Não         | `0 */6 * * *`            | `0 */6 * * *`            | Expressão cron para sync automática    |
+| `SYNC_RETRY_ATTEMPTS`     | Não         | `3`                      | `3`                      | Tentativas de retry                    |
+| `SYNC_RETRY_DELAY`        | Não         | `1000`                   | `1000`                   | Delay (ms) entre retries               |
+| `SYNC_BATCH_SIZE`         | Não         | `1000`                   | `1000`                   | Usuários por batch                     |
+| `SYNC_WORKER_CONCURRENCY` | Não         | `1`                      | `1`                      | Workers paralelos                      |
+| `SYNC_RETRY_DELAY_MS`     | Não         | `600000`                 | `600000`                 | Delay (ms) para retry de sync falha    |
+| `RATE_LIMIT_TTL`          | Não         | `60`                     | `60`                     | TTL do rate limit (segundos)           |
+| `RATE_LIMIT_MAX`          | Não         | `100`                    | `100`                    | Máximo de requests por TTL             |
 
 ## Como Rodar
 
@@ -245,13 +248,21 @@ Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 
 ## Documentação do Projeto
 
-| Arquivo | Propósito |
-|---------|-----------|
-| `.ai/CONTEXT.md` | Ponto de entrada para novos prompts |
-| `.ai/agents.md` | Regras de negócio e padrões de código |
-| `.ai/roadmap.md` | Fases e progresso do desenvolvimento |
-| `.ai/architecture.md` | Arquitetura e componentes |
-| `.ai/tech-decisions.md` | Log de decisões técnicas |
+**LEITURA OBRIGATÓRIA** (antes de qualquer desenvolvimento):
+
+| Arquivo                 | Propósito                             | Ação            |
+| ----------------------- | ------------------------------------- | --------------- |
+| `.ai/CONTEXT.md`        | Ponto de entrada para novos prompts   | Ler + Atualizar |
+| `.ai/agents.md`         | Regras de negócio e padrões de código | Ler + Atualizar |
+| `.ai/roadmap.md`        | Fases e progresso do desenvolvimento  | Ler + Atualizar |
+| `.ai/architecture.md`   | Arquitetura e componentes             | Ler + Atualizar |
+| `.ai/tech-decisions.md` | Log de decisões técnicas              | Ler + Atualizar |
+| `.env`                  | Variáveis de ambiente atuais          | Ler             |
+
+**Documentação adicional** (atualizar quando relevante):
+
+| Arquivo                            | Propósito                        |
+| ---------------------------------- | -------------------------------- |
 | `docs/TECHNICAL_IMPLEMENTATION.md` | Como cada parte foi implementada |
-| `CHANGELOG.md` | Histórico de mudanças |
-| `README.md` | Instruções de uso e setup |
+| `CHANGELOG.md`                     | Histórico de mudanças            |
+| `README.md`                        | Instruções de uso e setup        |

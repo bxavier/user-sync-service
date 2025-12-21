@@ -175,7 +175,7 @@ Aplicação inicia com validação de env vars, módulos usando ConfigService, c
   - Componentes verificados: Database, Redis, API Legada, Sistema, Filas
   - Status: healthy, degraded, unhealthy
   - HTTP 503 quando componentes críticos falham
-- [ ] Swagger completo
+- [x] Swagger documentado (contact, license, DTOs com @ApiProperty, endpoints com @ApiOperation/@ApiResponse)
 - [ ] Testes unitários
 - [ ] Testes de integração com mocks
 

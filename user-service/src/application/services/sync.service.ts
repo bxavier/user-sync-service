@@ -42,10 +42,10 @@ export class SyncService implements OnModuleInit {
     private readonly syncLogRepository: SyncLogRepository,
     private readonly configService: ConfigService,
   ) {
-    this.batchSize = this.configService.get<number>('SYNC_BATCH_SIZE', 2000);
+    this.batchSize = this.configService.get<number>('SYNC_BATCH_SIZE', 1000);
     this.workerConcurrency = this.configService.get<number>(
       'SYNC_WORKER_CONCURRENCY',
-      20,
+      1,
     );
   }
 

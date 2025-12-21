@@ -84,7 +84,7 @@ export class EnvironmentVariables {
   @Min(1)
   @IsOptional()
   @Transform(({ value }) => parseInt(value, 10))
-  SYNC_WORKER_CONCURRENCY: number = 20;
+  SYNC_WORKER_CONCURRENCY: number = 1;
 
   // Rate Limiting
   @IsInt()

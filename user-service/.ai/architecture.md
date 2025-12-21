@@ -38,6 +38,7 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
 ## Camadas (DDD Simplificado)
 
 ### Domain Layer
+
 - **Entities**:
   - `User` - usuário sincronizado (com soft delete via `deleted`/`deletedAt`)
   - `SyncLog` - log de execução de sincronização (com enum `SyncStatus`)
@@ -46,6 +47,7 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
   - `SyncLogRepository` - create, update, findById, findLatest, findAll, markStaleAsFailed
 
 ### Application Layer
+
 - **Services**:
   - `UserService` - CRUD de usuários, validação de unicidade, exportação CSV
   - `SyncService` - enfileiramento de jobs, verificação de idempotência, cron scheduler, métricas de status, reset de syncs travadas
@@ -59,9 +61,10 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
   - `HealthResponseDto`, `HealthDetailsResponseDto`, `ComponentHealthDto` - respostas de health check
 
 ### Infrastructure Layer
+
 - **Config**:
   - `env.validation.ts` - validação centralizada de env vars com class-validator
-  - `swagger.config.ts` - configuração Swagger
+  - `swagger.config.ts` - configuração Swagger (contact, license, tags)
 - **Database**:
   - `typeorm-logger.ts` - logger integrado ao NestJS
   - Configuração inline no `AppModule` via `TypeOrmModule.forRootAsync`
@@ -83,6 +86,7 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
 - **Logger**: LoggerService customizado (estende ConsoleLogger)
 
 ### Presentation Layer
+
 - **Controllers**:
   - `UserController` - GET /users, GET /users/export/csv, GET /users/:user_name, POST /users, PUT /users/:id, DELETE /users/:id
   - `SyncController` - POST /sync, GET /sync/status, GET /sync/history, POST /sync/reset
@@ -110,39 +114,42 @@ TypeOrmModule.forRootAsync({
 
 ### Variáveis de Ambiente
 
-| Variável | Obrigatório | Default | Descrição |
-|----------|-------------|---------|-----------|
-| `REDIS_HOST` | Sim | - | Host do Redis |
-| `REDIS_PORT` | Sim | - | Porta do Redis |
-| `LEGACY_API_URL` | Sim | - | URL da API legada |
-| `LEGACY_API_KEY` | Sim | - | Chave de autenticação |
-| `SYNC_BATCH_SIZE` | Não | 2000 | Usuários por batch |
-| `SYNC_WORKER_CONCURRENCY` | Não | 20 | Workers paralelos |
-| `SYNC_CRON_EXPRESSION` | Não | `0 */6 * * *` | Cron da sync |
-| `TYPEORM_LOGGING` | Não | true | Logs SQL |
+| Variável                  | Obrigatório | Default       | Descrição             |
+| ------------------------- | ----------- | ------------- | --------------------- |
+| `REDIS_HOST`              | Sim         | -             | Host do Redis         |
+| `REDIS_PORT`              | Sim         | -             | Porta do Redis        |
+| `LEGACY_API_URL`          | Sim         | -             | URL da API legada     |
+| `LEGACY_API_KEY`          | Sim         | -             | Chave de autenticação |
+| `SYNC_BATCH_SIZE`         | Não         | 1000          | Usuários por batch    |
+| `SYNC_WORKER_CONCURRENCY` | Não         | 1             | Workers paralelos     |
+| `SYNC_CRON_EXPRESSION`    | Não         | `0 */6 * * *` | Cron da sync          |
+| `TYPEORM_LOGGING`         | Não         | true          | Logs SQL              |
 
 ## Padrões de Resiliência
 
 ### Retry com Exponential Backoff
+
 ```typescript
 const retryConfig = {
   maxAttempts: 3,
   initialDelay: 1000,
   maxDelay: 10000,
-  backoffMultiplier: 2
+  backoffMultiplier: 2,
 };
 ```
 
 ### Circuit Breaker
+
 ```typescript
 const circuitBreakerConfig = {
   failureThreshold: 5,
   successThreshold: 2,
-  timeout: 30000
+  timeout: 30000,
 };
 ```
 
 ### Recuperação de Syncs Travadas
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Sync Recovery                             │
@@ -212,30 +219,34 @@ const circuitBreakerConfig = {
 ## Endpoints da API
 
 ### Users
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | /users | Lista usuários paginados |
-| GET | /users/export/csv | Exporta usuários em CSV (streaming) |
-| GET | /users/:user_name | Busca usuário por userName |
-| POST | /users | Cria novo usuário |
-| PUT | /users/:id | Atualiza usuário |
-| DELETE | /users/:id | Soft delete de usuário |
+
+| Método | Endpoint          | Descrição                           |
+| ------ | ----------------- | ----------------------------------- |
+| GET    | /users            | Lista usuários paginados            |
+| GET    | /users/export/csv | Exporta usuários em CSV (streaming) |
+| GET    | /users/:user_name | Busca usuário por userName          |
+| POST   | /users            | Cria novo usuário                   |
+| PUT    | /users/:id        | Atualiza usuário                    |
+| DELETE | /users/:id        | Soft delete de usuário              |
 
 ### Sync
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| POST | /sync | Inicia sincronização |
-| GET | /sync/status | Status da última sync (com métricas) |
-| GET | /sync/history | Histórico de sincronizações |
-| POST | /sync/reset | Reseta sync travada |
+
+| Método | Endpoint      | Descrição                            |
+| ------ | ------------- | ------------------------------------ |
+| POST   | /sync         | Inicia sincronização                 |
+| GET    | /sync/status  | Status da última sync (com métricas) |
+| GET    | /sync/history | Histórico de sincronizações          |
+| POST   | /sync/reset   | Reseta sync travada                  |
 
 ### Health
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | /health | Liveness probe (simples, rápido) |
-| GET | /health/details | Readiness probe com detalhes (rate limit: 10 req/min) |
+
+| Método | Endpoint        | Descrição                                             |
+| ------ | --------------- | ----------------------------------------------------- |
+| GET    | /health         | Liveness probe (simples, rápido)                      |
+| GET    | /health/details | Readiness probe com detalhes (rate limit: 10 req/min) |
 
 **Componentes verificados no `/health/details`:**
+
 - Database (SQLite) - latência, status
 - Redis - latência, status
 - API Legada - latência, status (degraded se indisponível)
@@ -243,22 +254,23 @@ const circuitBreakerConfig = {
 - Filas - jobs waiting, active, completed, failed, delayed
 
 **Status possíveis:**
+
 - `healthy` - Todos os componentes críticos OK
 - `degraded` - Componentes não-críticos com problema (ex: API legada)
 - `unhealthy` - Componentes críticos falharam (HTTP 503)
 
 ## Decisões Técnicas
 
-| Decisão | Justificativa |
-|---------|---------------|
-| SQLite | Simplicidade para dev local, requisito do teste |
-| BullMQ | Jobs assíncronos com retry automático |
-| Fastify | Performance superior ao Express |
-| TypeORM | Abstrações DDD, suporte a SQLite |
-| Streaming + Batch Queue | Suporte a 1M+ registros sem esgotar memória |
-| Parallel Workers (20x) | Processamento distribuído para alta performance |
-| Transação Explícita | Reduz I/O de disco no SQLite (fsync único por batch) |
-| Bulk Upsert | Operações em lote para reduzir I/O de banco |
-| ConfigModule + Validation | Fail-fast para env vars inválidas |
-| OnModuleInit Recovery | Recuperação automática de syncs órfãs no startup |
-| Controllers Thin | Lógica de negócio apenas nos services |
+| Decisão                   | Justificativa                                        |
+| ------------------------- | ---------------------------------------------------- |
+| SQLite                    | Simplicidade para dev local, requisito do teste      |
+| BullMQ                    | Jobs assíncronos com retry automático                |
+| Fastify                   | Performance superior ao Express                      |
+| TypeORM                   | Abstrações DDD, suporte a SQLite                     |
+| Streaming + Batch Queue   | Suporte a 1M+ registros sem esgotar memória          |
+| Parallel Workers (20x)    | Processamento distribuído para alta performance      |
+| Transação Explícita       | Reduz I/O de disco no SQLite (fsync único por batch) |
+| Bulk Upsert               | Operações em lote para reduzir I/O de banco          |
+| ConfigModule + Validation | Fail-fast para env vars inválidas                    |
+| OnModuleInit Recovery     | Recuperação automática de syncs órfãs no startup     |
+| Controllers Thin          | Lógica de negócio apenas nos services                |

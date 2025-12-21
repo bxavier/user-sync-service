@@ -8,6 +8,8 @@ export function setupSwagger(app: INestApplication): void {
       'API for user management and legacy system synchronization',
     )
     .setVersion('1.0')
+    .setContact('Bruno Xavier', 'https://brunoxavier.com.br', 'bruno@brunoxavier.com.br')
+    .setLicense('MIT', 'https://opensource.org/licenses/MIT')
     .addTag('users', 'User management endpoints')
     .addTag('sync', 'Synchronization endpoints')
     .addTag('health', 'Health check endpoints')

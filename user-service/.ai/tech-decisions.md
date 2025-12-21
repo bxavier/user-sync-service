@@ -6,12 +6,15 @@
 **Status**: Aprovado
 
 ### Contexto
+
 Precisamos de um framework robusto para API REST com suporte a DDD.
 
 ### Decisão
+
 Usar NestJS com adapter Fastify.
 
 ### Justificativa
+
 - NestJS oferece estrutura modular ideal para DDD
 - Fastify tem performance superior ao Express
 - Suporte nativo a TypeScript
@@ -25,12 +28,15 @@ Usar NestJS com adapter Fastify.
 **Status**: Aprovado
 
 ### Contexto
+
 Precisamos de persistência simples para desenvolvimento local.
 
 ### Decisão
+
 SQLite com TypeORM para desenvolvimento local.
 
 ### Justificativa
+
 - Requisito do teste técnico
 - Simplicidade - não requer servidor de banco
 - TypeORM abstrai diferenças entre bancos
@@ -44,18 +50,22 @@ SQLite com TypeORM para desenvolvimento local.
 **Status**: Aprovado
 
 ### Contexto
+
 Sincronização com sistema legado deve ser assíncrona e resiliente.
 
 ### Decisão
+
 Usar BullMQ com Redis para fila de jobs.
 
 ### Justificativa
+
 - Retry automático com backoff
 - Persistência de jobs
 - Dashboard de monitoramento
 - Suporte a cron jobs
 
 ### Alternativa AWS (Documentação)
+
 Em produção Lambda, usar SQS + Step Functions.
 
 ---
@@ -66,12 +76,15 @@ Em produção Lambda, usar SQS + Step Functions.
 **Status**: Aprovado
 
 ### Contexto
+
 Precisamos de separação de responsabilidades sem over-engineering.
 
 ### Decisão
+
 DDD simplificado com 4 camadas principais.
 
 ### Estrutura
+
 ```
 domain/       - Entidades e interfaces
 application/  - Serviços e DTOs
@@ -80,6 +93,7 @@ presentation/ - Controllers
 ```
 
 ### Justificativa
+
 - Código organizado e testável
 - Sem complexidade excessiva
 - Fácil de entender e manter
@@ -92,18 +106,21 @@ presentation/ - Controllers
 **Status**: Aprovado
 
 ### Contexto
+
 Aplicação deve rodar localmente com Docker mas ser documentada para deploy serverless.
 
 ### Decisão
+
 Desenvolver com Docker + SQLite + BullMQ, documentar arquitetura Lambda.
 
 ### Mapeamento
-| Local | Produção AWS |
-|-------|--------------|
-| Docker | Lambda |
+
+| Local  | Produção AWS    |
+| ------ | --------------- |
+| Docker | Lambda          |
 | SQLite | Aurora/DynamoDB |
-| BullMQ | Step Functions |
-| Redis | ElastiCache/SQS |
+| BullMQ | Step Functions  |
+| Redis  | ElastiCache/SQS |
 
 ---
 
@@ -113,12 +130,15 @@ Desenvolver com Docker + SQLite + BullMQ, documentar arquitetura Lambda.
 **Status**: Aprovado
 
 ### Contexto
+
 Precisamos de um logger consistente com suporte a metadata estruturada.
 
 ### Decisão
+
 Criar LoggerService customizado estendendo o ConsoleLogger nativo do NestJS.
 
 ### Justificativa
+
 - **Sem dependências externas**: Não adiciona Winston, Pino ou outras libs
 - **Integração nativa**: Funciona com o lifecycle do NestJS
 - **Metadata estruturada**: Suporte a objetos JSON nos logs
@@ -126,6 +146,7 @@ Criar LoggerService customizado estendendo o ConsoleLogger nativo do NestJS.
 - **Formatação colorida**: Usa formatação nativa do NestJS
 
 ### Uso
+
 ```typescript
 // Injeção via construtor
 private readonly logger = new LoggerService(MyService.name);
@@ -141,6 +162,7 @@ this.logger.error('Failed', { error: error.message });
 ```
 
 ### Estrutura
+
 ```
 infrastructure/
 └── logger/
@@ -156,12 +178,15 @@ infrastructure/
 **Status**: Aprovado
 
 ### Contexto
+
 A API legada retorna 1 milhão de usuários via streaming. Processar um por um é lento (~1000/min).
 
 ### Decisão
+
 Implementar arquitetura de filas distribuídas com streaming + batch processing.
 
 ### Arquitetura
+
 ```
 LegacyAPI → Streaming → SyncProcessor (orquestrador)
                               ↓
@@ -173,23 +198,26 @@ LegacyAPI → Streaming → SyncProcessor (orquestrador)
 ```
 
 ### Justificativa
+
 - **Streaming real**: `axios` com `responseType: 'stream'` evita carregar 1M registros em memória
 - **Batch processing**: Agrupa 1000 usuários por job, reduz overhead de filas
 - **Paralelismo**: 5 workers processam simultaneamente
 - **Bulk upsert**: Uma query para N registros (vs N queries)
 
 ### Resultados
+
 - Antes: horas para 1M usuários
 - Depois: ~27 minutos para 1M usuários
 
 ### Configuração
+
 ```typescript
 const BATCH_SIZE = 1000;
 
 @Processor(SYNC_BATCH_QUEUE_NAME, {
   concurrency: 5, // 5 workers paralelos
 })
-export class SyncBatchProcessor { }
+export class SyncBatchProcessor {}
 ```
 
 ---
@@ -200,12 +228,15 @@ export class SyncBatchProcessor { }
 **Status**: Aprovado
 
 ### Contexto
+
 A regra de negócio exige unicidade por `userName`, não por `legacyId`.
 
 ### Decisão
+
 Usar `userName` como chave de conflito no upsert.
 
 ### Implementação
+
 ```typescript
 await this.repository.upsert(entities, {
   conflictPaths: ['userName'],
@@ -214,6 +245,7 @@ await this.repository.upsert(entities, {
 ```
 
 ### Justificativa
+
 - Respeita a regra de negócio (unicidade por userName)
 - Permite que usuários do legado sejam "mesclados" por userName
 - Mantém `legacyId` apenas como referência de origem
@@ -226,12 +258,15 @@ await this.repository.upsert(entities, {
 **Status**: Aprovado
 
 ### Contexto
+
 Aplicação usava `process.env` diretamente em vários lugares. Precisamos de validação centralizada e tipagem forte para variáveis de ambiente.
 
 ### Decisão
+
 Usar `ConfigModule.forRoot` do NestJS com validação via class-validator.
 
 ### Implementação
+
 ```typescript
 // env.validation.ts
 export class EnvironmentVariables {
@@ -264,10 +299,11 @@ export function validate(config: Record<string, unknown>) {
 ConfigModule.forRoot({
   isGlobal: true,
   validate,
-})
+});
 ```
 
 ### Justificativa
+
 - **Fail-fast**: Aplicação não inicia se env vars obrigatórias estiverem faltando
 - **Tipagem forte**: `ConfigService<EnvironmentVariables>` oferece autocomplete
 - **Valores default**: Definidos na classe, não espalhados pelo código
@@ -275,12 +311,13 @@ ConfigModule.forRoot({
 - **Padrão NestJS**: Forma idiomática do framework
 
 ### Variáveis Configuráveis
-| Variável | Default | Descrição |
-|----------|---------|-----------|
-| `SYNC_BATCH_SIZE` | 2000 | Usuários por batch |
-| `SYNC_WORKER_CONCURRENCY` | 20 | Workers paralelos |
-| `TYPEORM_LOGGING` | true | Habilita logs SQL |
-| `SYNC_CRON_EXPRESSION` | `0 */6 * * *` | Cron da sync |
+
+| Variável                  | Default       | Descrição          |
+| ------------------------- | ------------- | ------------------ |
+| `SYNC_BATCH_SIZE`         | 1000          | Usuários por batch |
+| `SYNC_WORKER_CONCURRENCY` | 1             | Workers paralelos  |
+| `TYPEORM_LOGGING`         | true          | Habilita logs SQL  |
+| `SYNC_CRON_EXPRESSION`    | `0 */6 * * *` | Cron da sync       |
 
 ---
 
@@ -290,9 +327,11 @@ ConfigModule.forRoot({
 **Status**: Aprovado
 
 ### Contexto
+
 Syncs podem ficar travadas em status RUNNING/PROCESSING se a aplicação crashar ou for reiniciada durante uma sincronização.
 
 ### Decisão
+
 Implementar 3 mecanismos de recuperação:
 
 1. **Timeout automático**: Ao iniciar nova sync, verifica se há syncs em andamento há mais de 30 min e marca como FAILED
@@ -300,6 +339,7 @@ Implementar 3 mecanismos de recuperação:
 3. **Reset manual**: Endpoint `POST /sync/reset` para forçar reset de sync travada
 
 ### Implementação
+
 ```typescript
 // SyncLogRepository
 async markStaleAsFailed(thresholdMinutes: number, errorMessage: string): Promise<number> {
@@ -325,6 +365,7 @@ async onModuleInit() {
 ```
 
 ### Justificativa
+
 - Evita syncs fantasma bloqueando novas execuções
 - Permite operação autônoma sem intervenção manual
 - Mantém histórico de falhas para auditoria
@@ -337,12 +378,15 @@ async onModuleInit() {
 **Status**: Aprovado
 
 ### Contexto
+
 Controllers estavam com lógica de cálculo de métricas (recordsPerSecond, progressPercent, etc) e formatação de dados (CSV).
 
 ### Decisão
+
 Mover toda lógica de negócio para a camada Application (services), deixando controllers apenas como adaptadores HTTP.
 
 ### Antes
+
 ```typescript
 // sync.controller.ts - RUIM
 async getStatus() {
@@ -355,6 +399,7 @@ async getStatus() {
 ```
 
 ### Depois
+
 ```typescript
 // sync.controller.ts - BOM
 async getStatus() {
@@ -370,6 +415,7 @@ async getLatestSyncStatus(): Promise<SyncStatusDto> {
 ```
 
 ### Justificativa
+
 - Controllers são thin (apenas delegam)
 - Lógica testável unitariamente no service
 - Reutilizável por outros consumers (CLI, jobs, etc)
@@ -383,12 +429,15 @@ async getLatestSyncStatus(): Promise<SyncStatusDto> {
 **Status**: Aprovado
 
 ### Contexto
+
 Ao tentar configurar `this.worker.concurrency` no construtor do `SyncBatchProcessor`, recebemos erro: "Worker has not yet been initialized".
 
 ### Decisão
+
 Usar o lifecycle hook `OnModuleInit` para configurar a concurrency do worker após a inicialização completa do módulo.
 
 ### Implementação
+
 ```typescript
 @Processor(SYNC_BATCH_QUEUE_NAME)
 export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
@@ -396,7 +445,10 @@ export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
 
   constructor(configService: ConfigService) {
     super();
-    this.workerConcurrency = configService.get<number>('SYNC_WORKER_CONCURRENCY', 20);
+    this.workerConcurrency = configService.get<number>(
+      'SYNC_WORKER_CONCURRENCY',
+      20,
+    );
   }
 
   onModuleInit() {
@@ -406,6 +458,7 @@ export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
 ```
 
 ### Justificativa
+
 - `WorkerHost` do `@nestjs/bullmq` inicializa o worker após o construtor
 - `OnModuleInit` é chamado quando o módulo está completamente inicializado
 - Permite usar `ConfigService` no construtor e aplicar no momento correto
@@ -418,16 +471,20 @@ export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
 **Status**: Aprovado
 
 ### Contexto
+
 Precisamos de health checks para observabilidade com ferramentas como Datadog e Zabbix, além de suporte a liveness/readiness probes do Kubernetes.
 
 ### Decisão
+
 Implementar dois endpoints de health check:
+
 1. `GET /health` - Liveness probe simples e rápido
 2. `GET /health/details` - Readiness probe com detalhes completos
 
 ### Implementação
 
 **Arquitetura:**
+
 ```
 HealthController
     └── HealthService
@@ -439,18 +496,22 @@ HealthController
 ```
 
 **Lógica de status:**
+
 - `healthy`: Todos os componentes críticos (DB, Redis) OK
 - `degraded`: Componentes não-críticos (API legada) com problema
 - `unhealthy`: Componentes críticos falharam → HTTP 503
 
 **Rate limiting:**
+
 - `/health`: Rate limit global (100 req/min)
 - `/health/details`: Rate limit restritivo (10 req/min) via `@Throttle`
 
 **Timeouts:**
+
 - Cada verificação de componente tem timeout de 3s para evitar bloqueio
 
 ### Exemplo de resposta `/health/details`
+
 ```json
 {
   "status": "healthy",
@@ -475,7 +536,35 @@ HealthController
 ```
 
 ### Justificativa
+
 - **Dois endpoints**: Separação entre liveness (rápido, para load balancers) e readiness (completo, para observabilidade)
 - **Rate limit restritivo**: Evita abuso do endpoint detalhado
 - **Componentes críticos vs não-críticos**: API legada indisponível não deve marcar o serviço como unhealthy
 - **Formato genérico**: Compatível com Datadog, Zabbix e outras ferramentas de monitoramento
+
+---
+
+## TDR-014: Documentação Swagger Completa
+
+**Data**: 2025-12-21
+**Status**: Aprovado
+
+### Contexto
+
+Precisamos de documentação Swagger completa para facilitar integração e testes.
+
+### Decisão
+
+Documentar todos os endpoints com decorators do NestJS/Swagger e adicionar metadata no DocumentBuilder.
+
+### Implementação
+
+- DTOs com `@ApiProperty` e `@ApiPropertyOptional`
+- Endpoints com `@ApiOperation`, `@ApiResponse`, `@ApiParam`
+- DocumentBuilder com `setContact` e `setLicense`
+
+### Justificativa
+
+- Swagger UI funciona como playground interativo
+- Facilita integração por outros times
+- Documentação sempre atualizada junto com o código
