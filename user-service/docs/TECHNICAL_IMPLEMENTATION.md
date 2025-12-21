@@ -14,6 +14,7 @@ Este documento explica, passo a passo, como cada parte do User Service foi imple
 6. [Fase 5: Sincronização Automática](#fase-5-sincronização-automática)
 7. [Fase 6: Exportação CSV](#fase-6-exportação-csv)
 8. [Fase 6.5: Refatoração ConfigModule](#fase-65-refatoração-configmodule)
+9. [Fase 7: Otimizações de Performance](#fase-7-otimizações-de-performance)
 
 ---
 
@@ -218,9 +219,8 @@ Criamos o cliente HTTP para buscar dados da API legada, com toda a resiliência 
 Cliente HTTP usando axios. Configuração via variáveis de ambiente:
 - `LEGACY_API_URL`: URL base da API
 - `LEGACY_API_KEY`: Chave de autenticação
-- `LEGACY_API_TIMEOUT`: Timeout das requisições
 
-**2. StreamParser**
+**2. Parser de JSON Concatenado**
 
 A API legada retorna dados num formato estranho: arrays JSON concatenados.
 
@@ -228,16 +228,17 @@ A API legada retorna dados num formato estranho: arrays JSON concatenados.
 [{user1}, {user2}][{user3}, {user4}]
 ```
 
-O `StreamParser` sabe lidar com isso. Ele também ignora JSON corrompido e continua processando o resto.
+O método `extractArrays()` no `LegacyApiClient` sabe lidar com isso. Ele também ignora JSON corrompido (20% das respostas) e continua processando o resto.
 
-**3. Retry com backoff exponencial**
+**3. Retry rápido (otimizado)**
 
-Quando a requisição falha (erro 500, 429, etc), tentamos de novo. Mas não imediatamente - esperamos um tempo que vai aumentando:
-- 1ª tentativa: espera 1 segundo
-- 2ª tentativa: espera 2 segundos
-- 3ª tentativa: espera 4 segundos
+Quando a requisição falha (erro 500, 429, etc), tentamos de novo com delays curtos:
+- `initialDelayMs: 100` - começa com 100ms
+- `maxDelayMs: 500` - máximo de 500ms
+- `backoffMultiplier: 1.5` - cresce devagar
+- `maxAttempts: 10` - até 10 tentativas
 
-Isso evita sobrecarregar a API legada.
+Isso é crucial porque a API legada tem 40% de chance de erro no início de cada requisição.
 
 **4. Circuit Breaker**
 
@@ -260,11 +261,10 @@ LegacyApiClient
 ```
 src/infrastructure/
 ├── legacy/
-│   ├── legacy-api.client.ts      # Cliente HTTP
-│   ├── stream-parser.ts          # Parser de JSON concatenado
+│   ├── legacy-api.client.ts      # Cliente HTTP com streaming e parser embutido
 │   └── legacy-user.interface.ts  # Tipagem dos dados
 └── resilience/
-    ├── retry.ts                  # Retry com backoff
+    ├── retry.ts                  # Retry com backoff rápido
     └── circuit-breaker.ts        # Circuit breaker
 ```
 
@@ -328,10 +328,11 @@ Endpoints:
 ### Garantias implementadas
 
 - **Idempotência**: Verifica PENDING/RUNNING/PROCESSING antes de criar novo job
-- **Deduplicação**: `bulkUpsertByUserName` usa userName como chave única
+- **Deduplicação**: `bulkUpsertByUserName` usa userName como chave única (raw SQL)
 - **Rastreabilidade**: SyncLog com status PENDING → RUNNING → PROCESSING → COMPLETED/FAILED
 - **Recuperação de travadas**: 3 mecanismos (timeout 30min, recovery no startup, reset manual)
-- **Performance**: 1M usuários em ~18 minutos (streaming + batch + 20 workers paralelos)
+- **Retry automático**: Se sync falhar, agenda retry em 10 minutos via `user-sync-retry` queue
+- **Performance**: 1M usuários em ~18-20 minutos (~800-850 reg/s)
 
 ### Arquivos criados
 
@@ -339,12 +340,13 @@ Endpoints:
 src/
 ├── infrastructure/
 │   └── queue/
-│       ├── sync.constants.ts        # SYNC_QUEUE_NAME, SYNC_BATCH_QUEUE_NAME
-│       ├── sync.processor.ts        # Orquestrador (streaming + batch queueing)
-│       ├── sync-batch.processor.ts  # Workers paralelos (concurrency: 20)
+│       ├── sync.constants.ts         # Nomes das filas e jobs
+│       ├── sync.processor.ts         # Orquestrador (streaming + batch queueing)
+│       ├── sync-batch.processor.ts   # Workers paralelos (concurrency: 5)
+│       ├── sync-retry.processor.ts   # Retry automático após falha
 │       └── index.ts
 ├── application/
-│   └── services/sync.service.ts     # Idempotência + cron + recovery
+│   └── services/sync.service.ts      # Idempotência + cron + recovery
 └── presentation/
     └── controllers/sync.controller.ts
 ```
@@ -611,11 +613,12 @@ Todas as variáveis são validadas no startup via `class-validator`. A aplicaç�
 | `REDIS_PORT` | **Sim** | - | Porta do Redis |
 | `LEGACY_API_URL` | **Sim** | - | URL da API legada |
 | `LEGACY_API_KEY` | **Sim** | - | Chave de autenticação |
-| `SYNC_BATCH_SIZE` | Não | 2000 | Usuários por batch |
-| `SYNC_WORKER_CONCURRENCY` | Não | 20 | Workers paralelos |
+| `SYNC_BATCH_SIZE` | Não | 1000 | Usuários por batch |
+| `SYNC_WORKER_CONCURRENCY` | Não | 1 | Workers paralelos |
 | `SYNC_CRON_EXPRESSION` | Não | `0 */6 * * *` | Cron da sync (a cada 6h) |
-| `SYNC_RETRY_ATTEMPTS` | Não | 3 | Tentativas de retry |
-| `SYNC_RETRY_DELAY` | Não | 1000 | Delay inicial do retry (ms) |
+| `SYNC_RETRY_ATTEMPTS` | Não | 3 | Tentativas de retry HTTP |
+| `SYNC_RETRY_DELAY` | Não | 1000 | Delay inicial do retry HTTP (ms) |
+| `SYNC_RETRY_DELAY_MS` | Não | 600000 | Delay para retry de sync falha (10 min) |
 | `RATE_LIMIT_TTL` | Não | 60 | TTL do rate limiting (s) |
 | `RATE_LIMIT_MAX` | Não | 100 | Max requests por TTL |
 
@@ -639,9 +642,10 @@ LEGACY_API_URL=http://localhost:3001
 LEGACY_API_KEY=test-api-key-2024
 
 # Sync (opcional - valores default são bons)
-SYNC_BATCH_SIZE=2000
-SYNC_WORKER_CONCURRENCY=20
+SYNC_BATCH_SIZE=1000
+SYNC_WORKER_CONCURRENCY=1
 SYNC_CRON_EXPRESSION=0 */6 * * *
+SYNC_RETRY_DELAY_MS=600000
 
 # Rate Limiting
 RATE_LIMIT_TTL=60
@@ -667,17 +671,143 @@ npm run start:dev
 
 ---
 
+## Fase 7: Otimizações de Performance
+
+**Status**: Concluído
+
+### O problema
+
+A sincronização inicial estava lenta (~170 reg/s, ~83 minutos para 1M usuários). O objetivo era chegar próximo ao limite teórico da API legada (~1000 reg/s, ~17 minutos).
+
+### Diagnóstico
+
+Adicionamos logs de timing em vários pontos para identificar o gargalo:
+
+```typescript
+// LegacyApiClient - tempo entre chunks
+stream.on('data', (chunk) => {
+  const timeSinceLastChunk = Date.now() - lastChunkTime;
+  // ...
+});
+
+// UserRepository - tempo de bulk upsert
+const startTime = Date.now();
+// ... upsert
+console.log(`[DB] bulkUpsert: ${totalMs}ms`);
+```
+
+Os logs mostraram que:
+- **Parse e DB**: Instantâneo (0-4ms)
+- **Retry HTTP**: Delays de 2-30 segundos por erro (40% de taxa de erro)
+
+### Soluções implementadas
+
+**1. Retry HTTP rápido**
+
+```typescript
+// Antes (lento)
+{
+  initialDelayMs: 2000,
+  maxDelayMs: 30000,
+  backoffMultiplier: 2,
+}
+
+// Depois (otimizado)
+{
+  initialDelayMs: 100,
+  maxDelayMs: 500,
+  backoffMultiplier: 1.5,
+  maxAttempts: 10,
+}
+```
+
+**2. Raw SQL Bulk Upsert**
+
+O TypeORM `upsert()` com SQLite causava erro "Cannot update entity because entity id is not set". Substituímos por raw SQL:
+
+```typescript
+const sql = `
+  INSERT INTO "users" (...)
+  VALUES ${placeholders.join(', ')}
+  ON CONFLICT ("user_name") DO UPDATE SET
+    "email" = excluded."email",
+    ...
+  WHERE excluded."legacy_created_at" > "users"."legacy_created_at"
+`;
+await this.dataSource.query(sql, values);
+```
+
+**3. Streaming non-blocking**
+
+O callback `onBatch` enfileira sem esperar:
+
+```typescript
+// Antes (bloqueante)
+await onBatch(allUsers);
+
+// Depois (non-blocking)
+pendingBatches.push(onBatch(allUsers));
+// ... aguarda tudo no final
+await Promise.all(pendingBatches);
+```
+
+**4. Retry Queue para falhas**
+
+Se o sync falhar completamente (após esgotar retries HTTP), agenda novo sync:
+
+```typescript
+// SyncProcessor catch
+this.scheduleRetry(syncLogId, errorMessage);
+
+// scheduleRetry()
+await this.retryQueue.add(SYNC_RETRY_JOB_NAME, jobData, {
+  delay: this.retryDelayMs, // 10 minutos
+});
+```
+
+### Resultado
+
+| Métrica | Antes | Depois |
+|---------|-------|--------|
+| Throughput | ~170 reg/s | ~800-850 reg/s |
+| Tempo para 1M | ~83 minutos | ~18-20 minutos |
+| Retry delay | 2-30 segundos | 100-500ms |
+
+O throughput está próximo do limite teórico da API legada (~1000 reg/s), considerando:
+- API envia 100 reg a cada 100ms = 1000 reg/s
+- 40% de taxa de erro (20% 500 + 20% 429)
+- 20% de dados corrompidos ignorados
+
+### Arquivos modificados
+
+```
+src/
+├── infrastructure/
+│   ├── legacy/
+│   │   └── legacy-api.client.ts    # Retry rápido, logs de timing
+│   ├── queue/
+│   │   ├── sync.processor.ts       # ConfigService, retry queue
+│   │   ├── sync-retry.processor.ts # Novo: processa retries
+│   │   └── sync.constants.ts       # Novas constantes
+│   ├── repositories/
+│   │   └── user.repository.ts      # Raw SQL bulk upsert
+│   └── resilience/
+│       └── retry.ts                # Logs de tempo de espera
+└── .env                            # SYNC_RETRY_DELAY_MS
+```
+
+---
+
 ## Próximos Passos
 
-Depois da Fase 6.5, ainda falta:
+Depois da Fase 7, ainda falta:
 
-- **Fase 7**: Qualidade e Observabilidade
+- **Fase 8**: Qualidade e Observabilidade
   - Health check endpoint (`GET /health`)
   - Testes unitários e de integração
   - Coverage > 70%
 
-- **Fase 8**: Documentação e Entrega
+- **Fase 9**: Documentação e Entrega
   - README.md completo
   - docs/AWS_ARCHITECTURE.md
-  - docs/OPTIMIZATIONS.md
   - Revisão final de código

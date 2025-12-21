@@ -7,6 +7,32 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+## [0.7.0] - 2025-12-21
+
+### Added
+- Retry Queue para sync falho (agenda retry automático em 10 minutos)
+- `SyncRetryProcessor` para processar retries da fila `user-sync-retry`
+- Variável `SYNC_RETRY_DELAY_MS` para configurar delay do retry (default: 600000ms = 10 min)
+- Logs de timing detalhados para diagnóstico de performance
+- Raw SQL bulk upsert com `INSERT ... ON CONFLICT` para SQLite
+
+### Changed
+- Retry HTTP otimizado: `initialDelayMs: 100`, `maxDelayMs: 500`, `backoffMultiplier: 1.5`
+- `SyncProcessor` agora usa `ConfigService` para `SYNC_BATCH_SIZE` e `SYNC_RETRY_DELAY_MS`
+- Streaming non-blocking: callbacks enfileiram sem bloquear o stream
+- Removidas constantes hardcoded `BATCH_SIZE` e `SYNC_RETRY_DELAY_MS` de `sync.constants.ts`
+
+### Fixed
+- Performance de sync: de ~170 reg/s para ~800-850 reg/s
+- Erro "Cannot update entity because entity id is not set" com TypeORM upsert (resolvido com raw SQL)
+- Gargalo de retry HTTP que causava delays de 2-30 segundos por erro
+
+### Performance
+- 1 milhão de usuários sincronizados em ~18-20 minutos (antes: ~83 minutos)
+- Throughput: ~800-850 registros/segundo (limite teórico da API legada: ~1000 reg/s)
+
+---
+
 ## [0.6.5] - 2024-12-21
 
 ### Added

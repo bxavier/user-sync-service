@@ -40,11 +40,6 @@ export class LegacyApiClient {
     this.logger.log('LegacyApiClient inicializado', { baseURL: this.baseURL });
   }
 
-  /**
-   * Busca usuários da API legada usando streaming real.
-   * Processa os dados em batches conforme chegam, chamando o callback para cada batch.
-   * Isso permite processar milhões de registros sem esgotar memória.
-   */
   async fetchUsersStreaming(onBatch: BatchCallback): Promise<StreamingResult> {
     this.logger.log('Iniciando streaming de usuários da API legada');
 
@@ -52,10 +47,10 @@ export class LegacyApiClient {
       withRetry(
         async () => this.doStreamingFetch(onBatch),
         {
-          maxAttempts: 5,
-          initialDelayMs: 2000,
-          maxDelayMs: 30000,
-          backoffMultiplier: 2,
+          maxAttempts: 10,
+          initialDelayMs: 100,
+          maxDelayMs: 500,
+          backoffMultiplier: 1.5,
         },
         this.logger,
       ),
@@ -66,75 +61,106 @@ export class LegacyApiClient {
     const response = await axios.get(`${this.baseURL}/external/users`, {
       headers: { 'x-api-key': this.apiKey },
       responseType: 'stream',
-      timeout: 0, // Sem timeout para streaming longo
+      timeout: 0,
     });
 
     const stream = response.data as Readable;
     let buffer = '';
     let totalProcessed = 0;
     let totalErrors = 0;
+    const pendingBatches: Promise<void>[] = [];
 
     return new Promise((resolve, reject) => {
-      stream.on('data', async (chunk: Buffer) => {
-        // Pausa o stream enquanto processa para evitar backpressure
-        stream.pause();
+      let lastChunkTime = Date.now();
+      let chunkCount = 0;
+
+      stream.on('data', (chunk: Buffer) => {
+        const now = Date.now();
+        const timeSinceLastChunk = now - lastChunkTime;
+        lastChunkTime = now;
+        chunkCount++;
 
         buffer += chunk.toString();
 
-        // Tenta extrair arrays JSON completos do buffer
-        const { arrays, remaining } = this.extractCompleteArrays(buffer);
-        buffer = remaining;
+        // Extrai arrays JSON completos do buffer
+        const result = this.extractArrays(buffer);
+        buffer = result.remaining;
 
-        for (const jsonStr of arrays) {
-          try {
-            const users = JSON.parse(jsonStr) as unknown[];
-            const validUsers = users.filter((u): u is LegacyUser =>
-              this.isValidLegacyUser(u),
-            );
+        // Processa todos os arrays encontrados
+        if (result.arrays.length > 0) {
+          const allUsers: LegacyUser[] = [];
 
-            if (validUsers.length > 0) {
-              await onBatch(validUsers);
-              totalProcessed += validUsers.length;
-
-              this.logger.debug('Batch processado', {
-                batchSize: validUsers.length,
-                totalProcessed,
-              });
-            }
-
-            totalErrors += users.length - validUsers.length;
-          } catch {
-            // JSON corrompido - ignora e continua
-            totalErrors++;
-            this.logger.warn('JSON corrompido ignorado');
-          }
-        }
-
-        // Resume o stream após processar
-        stream.resume();
-      });
-
-      stream.on('end', () => {
-        // Processa qualquer dado restante no buffer
-        if (buffer.trim()) {
-          const { arrays } = this.extractCompleteArrays(buffer);
-          for (const jsonStr of arrays) {
+          for (const jsonStr of result.arrays) {
             try {
-              const users = JSON.parse(jsonStr) as unknown[];
-              const validUsers = users.filter((u): u is LegacyUser =>
-                this.isValidLegacyUser(u),
-              );
-              // Nota: não podemos chamar onBatch de forma async aqui no evento 'end'
-              // então apenas contamos
-              totalProcessed += validUsers.length;
+              const parsed = JSON.parse(jsonStr) as unknown[];
+              for (const item of parsed) {
+                if (this.isValidUser(item)) {
+                  allUsers.push(item as LegacyUser);
+                } else {
+                  totalErrors++;
+                }
+              }
             } catch {
               totalErrors++;
             }
           }
+
+          if (allUsers.length > 0) {
+            totalProcessed += allUsers.length;
+
+            // Log de timing a cada 1000 registros
+            if (totalProcessed % 1000 < allUsers.length) {
+              this.logger.log('Timing chunk', {
+                timeSinceLastChunk,
+                chunkCount,
+                arraysInChunk: result.arrays.length,
+                usersInChunk: allUsers.length,
+                totalProcessed,
+                totalErrors,
+              });
+            }
+
+            // Enfileira sem aguardar - não bloqueia o stream
+            pendingBatches.push(onBatch(allUsers));
+          }
+        }
+      });
+
+      stream.on('end', async () => {
+        // Processa dados restantes no buffer
+        if (buffer.trim()) {
+          const result = this.extractArrays(buffer);
+          const allUsers: LegacyUser[] = [];
+
+          for (const jsonStr of result.arrays) {
+            try {
+              const parsed = JSON.parse(jsonStr) as unknown[];
+              for (const item of parsed) {
+                if (this.isValidUser(item)) {
+                  allUsers.push(item as LegacyUser);
+                } else {
+                  totalErrors++;
+                }
+              }
+            } catch {
+              totalErrors++;
+            }
+          }
+
+          if (allUsers.length > 0) {
+            totalProcessed += allUsers.length;
+            pendingBatches.push(onBatch(allUsers));
+          }
         }
 
-        this.logger.log('Streaming concluído', { totalProcessed, totalErrors });
-        resolve({ totalProcessed, totalErrors });
+        // Aguarda todos os batches pendentes terminarem
+        try {
+          await Promise.all(pendingBatches);
+          this.logger.log('Streaming concluído', { totalProcessed, totalErrors });
+          resolve({ totalProcessed, totalErrors });
+        } catch (error) {
+          reject(error);
+        }
       });
 
       stream.on('error', (error) => {
@@ -146,55 +172,55 @@ export class LegacyApiClient {
 
   /**
    * Extrai arrays JSON completos do buffer.
-   * A API legada envia arrays concatenados: [{...}][{...}]
    */
-  private extractCompleteArrays(data: string): {
-    arrays: string[];
-    remaining: string;
-  } {
+  private extractArrays(data: string): { arrays: string[]; remaining: string } {
     const arrays: string[] = [];
     let depth = 0;
     let start = -1;
+    let inString = false;
+    let escape = false;
     let lastEnd = 0;
 
     for (let i = 0; i < data.length; i++) {
       const char = data[i];
 
-      if (char === '[') {
-        if (depth === 0) {
-          start = i;
-        }
-        depth++;
-      } else if (char === ']') {
-        depth--;
-        if (depth === 0 && start !== -1) {
-          arrays.push(data.substring(start, i + 1));
-          lastEnd = i + 1;
-          start = -1;
+      if (!escape && char === '"') {
+        inString = !inString;
+      }
+      escape = !escape && inString && char === '\\';
+
+      if (!inString) {
+        if (char === '[') {
+          if (depth === 0) {
+            start = i;
+          }
+          depth++;
+        } else if (char === ']') {
+          depth--;
+          if (depth === 0 && start !== -1) {
+            arrays.push(data.substring(start, i + 1));
+            lastEnd = i + 1;
+            start = -1;
+          }
         }
       }
     }
 
-    // Retorna o que sobrou (array incompleto) como remaining
     return {
       arrays,
-      remaining: data.substring(lastEnd),
+      remaining: start !== -1 ? data.substring(start) : data.substring(lastEnd),
     };
   }
 
-  private isValidLegacyUser(obj: unknown): obj is LegacyUser {
-    if (typeof obj !== 'object' || obj === null) {
-      return false;
-    }
-
-    const user = obj as Record<string, unknown>;
-
+  private isValidUser(obj: unknown): boolean {
+    if (typeof obj !== 'object' || obj === null) return false;
+    const u = obj as Record<string, unknown>;
     return (
-      typeof user.id === 'number' &&
-      typeof user.userName === 'string' &&
-      typeof user.email === 'string' &&
-      typeof user.createdAt === 'string' &&
-      typeof user.deleted === 'boolean'
+      typeof u.id === 'number' &&
+      typeof u.userName === 'string' &&
+      typeof u.email === 'string' &&
+      typeof u.createdAt === 'string' &&
+      typeof u.deleted === 'boolean'
     );
   }
 }

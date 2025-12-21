@@ -58,6 +58,7 @@ export async function withRetry<T>(
         );
       }
 
+      const waitStart = Date.now();
       logger?.warn('Tentativa falhou, aguardando retry', {
         attempt,
         maxAttempts: finalConfig.maxAttempts,
@@ -66,6 +67,8 @@ export async function withRetry<T>(
       });
 
       await sleep(delay);
+      const waitedMs = Date.now() - waitStart;
+      logger?.log(`[RETRY] Esperou ${waitedMs}ms antes de retry ${attempt + 1}`);
       delay = Math.min(delay * finalConfig.backoffMultiplier, finalConfig.maxDelayMs);
     }
   }

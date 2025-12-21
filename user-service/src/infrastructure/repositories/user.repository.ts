@@ -126,58 +126,62 @@ export class UserRepositoryImpl implements UserRepository {
       return 0;
     }
 
-    // 1. Deduplica dentro do batch: mantém apenas o registro mais recente por userName
-    const deduped = this.deduplicateByUserName(data);
+    // SQLite SQLITE_MAX_VARIABLE_NUMBER default = 999, com 6 campos = 166 max
+    const CHUNK_SIZE = 166;
+    const startTime = Date.now();
+    let totalChunks = 0;
 
-    // 2. Usa SQL raw para UPDATE condicional (só atualiza se legacyCreatedAt for mais recente)
-    await this.dataSource.transaction(async (manager) => {
-      for (const item of deduped) {
-        const legacyCreatedAtStr = item.legacyCreatedAt.toISOString();
-        const deletedAtStr = item.deleted ? new Date().toISOString() : null;
-
-        // INSERT OR UPDATE condicional: só atualiza se o novo registro for mais recente
-        await manager.query(
-          `
-          INSERT INTO "users" ("legacy_id", "user_name", "email", "legacy_created_at", "deleted", "deleted_at")
-          VALUES (?, ?, ?, ?, ?, ?)
-          ON CONFLICT ("user_name") DO UPDATE SET
-            "legacy_id" = excluded."legacy_id",
-            "email" = excluded."email",
-            "legacy_created_at" = excluded."legacy_created_at",
-            "deleted" = excluded."deleted",
-            "deleted_at" = excluded."deleted_at"
-          WHERE excluded."legacy_created_at" > "users"."legacy_created_at"
-             OR "users"."legacy_created_at" IS NULL
-          `,
-          [
-            item.legacyId,
-            item.userName,
-            item.email,
-            legacyCreatedAtStr,
-            item.deleted ? 1 : 0,
-            deletedAtStr,
-          ],
-        );
-      }
-    });
-
-    return deduped.length;
-  }
-
-  /**
-   * Deduplica array por userName, mantendo o registro com legacyCreatedAt mais recente
-   */
-  private deduplicateByUserName(data: UpsertUserData[]): UpsertUserData[] {
-    const map = new Map<string, UpsertUserData>();
-
-    for (const item of data) {
-      const existing = map.get(item.userName);
-      if (!existing || item.legacyCreatedAt > existing.legacyCreatedAt) {
-        map.set(item.userName, item);
-      }
+    for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+      const chunk = data.slice(i, i + CHUNK_SIZE);
+      await this.upsertChunk(chunk);
+      totalChunks++;
     }
 
-    return Array.from(map.values());
+    const totalMs = Date.now() - startTime;
+    if (totalMs > 100) {
+      // Log apenas se demorar mais de 100ms
+      console.log(
+        `[DB] bulkUpsert: ${data.length} registros em ${totalChunks} chunks, ${totalMs}ms (${Math.round(data.length / (totalMs / 1000))} reg/s)`,
+      );
+    }
+
+    return data.length;
+  }
+
+  private async upsertChunk(chunk: UpsertUserData[]): Promise<void> {
+    const values: unknown[] = [];
+    const placeholders: string[] = [];
+    const now = new Date().toISOString();
+
+    for (const item of chunk) {
+      placeholders.push(`(?, ?, ?, ?, ?, ?, ?, ?)`);
+      values.push(
+        item.legacyId,
+        item.userName,
+        item.email,
+        item.legacyCreatedAt.toISOString(),
+        now, // created_at
+        now, // updated_at
+        item.deleted ? 1 : 0,
+        item.deleted ? now : null,
+      );
+    }
+
+    const sql = `
+      INSERT INTO "users" ("legacy_id", "user_name", "email", "legacy_created_at", "created_at", "updated_at", "deleted", "deleted_at")
+      VALUES ${placeholders.join(', ')}
+      ON CONFLICT ("user_name") DO UPDATE SET
+        "legacy_id" = excluded."legacy_id",
+        "email" = excluded."email",
+        "legacy_created_at" = excluded."legacy_created_at",
+        "updated_at" = excluded."updated_at",
+        "deleted" = excluded."deleted",
+        "deleted_at" = excluded."deleted_at"
+      WHERE excluded."legacy_created_at" > "users"."legacy_created_at"
+         OR "users"."legacy_created_at" IS NULL
+    `;
+
+    await this.dataSource.query(sql, values);
   }
 
   async *findAllForExport(

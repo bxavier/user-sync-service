@@ -14,8 +14,10 @@ import { UserService, SyncService } from './application/services';
 import {
   SYNC_QUEUE_NAME,
   SYNC_BATCH_QUEUE_NAME,
+  SYNC_RETRY_QUEUE_NAME,
   SyncProcessor,
   SyncBatchProcessor,
+  SyncRetryProcessor,
 } from './infrastructure/queue';
 import { LegacyApiClient } from './infrastructure/legacy';
 
@@ -56,6 +58,7 @@ import { LegacyApiClient } from './infrastructure/legacy';
     BullModule.registerQueue(
       { name: SYNC_QUEUE_NAME },
       { name: SYNC_BATCH_QUEUE_NAME },
+      { name: SYNC_RETRY_QUEUE_NAME },
     ),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRootAsync({
@@ -75,6 +78,7 @@ import { LegacyApiClient } from './infrastructure/legacy';
     SyncService,
     SyncProcessor,
     SyncBatchProcessor,
+    SyncRetryProcessor,
     LegacyApiClient,
   ],
 })

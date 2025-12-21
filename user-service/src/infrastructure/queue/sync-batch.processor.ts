@@ -1,6 +1,5 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Inject, OnModuleInit } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Inject } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { SYNC_BATCH_QUEUE_NAME } from './sync.constants';
 import { LoggerService } from '../logger';
@@ -26,28 +25,17 @@ export interface SyncBatchJobResult {
   durationMs: number;
 }
 
-@Processor(SYNC_BATCH_QUEUE_NAME)
-export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
+@Processor(SYNC_BATCH_QUEUE_NAME, {
+  concurrency: 5, // Processa até 5 batches em paralelo
+})
+export class SyncBatchProcessor extends WorkerHost {
   private readonly logger = new LoggerService(SyncBatchProcessor.name);
-  private readonly workerConcurrency: number;
 
   constructor(
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
-    configService: ConfigService,
   ) {
     super();
-    this.workerConcurrency = configService.get<number>(
-      'SYNC_WORKER_CONCURRENCY',
-      20,
-    );
-  }
-
-  onModuleInit() {
-    this.worker.concurrency = this.workerConcurrency;
-    this.logger.log('SyncBatchProcessor inicializado', {
-      concurrency: this.workerConcurrency,
-    });
   }
 
   async process(job: Job<SyncBatchJobData>): Promise<SyncBatchJobResult> {

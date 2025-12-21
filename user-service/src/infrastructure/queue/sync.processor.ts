@@ -6,7 +6,10 @@ import {
   SYNC_QUEUE_NAME,
   SYNC_BATCH_QUEUE_NAME,
   SYNC_BATCH_JOB_NAME,
+  SYNC_RETRY_QUEUE_NAME,
+  SYNC_RETRY_JOB_NAME,
 } from './sync.constants';
+import type { SyncRetryJobData } from './sync-retry.processor';
 import { LoggerService } from '../logger';
 import { LegacyApiClient } from '../legacy';
 import type { LegacyUser } from '../legacy';
@@ -31,6 +34,7 @@ export interface SyncJobResult {
 export class SyncProcessor extends WorkerHost {
   private readonly logger = new LoggerService(SyncProcessor.name);
   private readonly batchSize: number;
+  private readonly retryDelayMs: number;
 
   constructor(
     private readonly legacyApiClient: LegacyApiClient,
@@ -38,10 +42,16 @@ export class SyncProcessor extends WorkerHost {
     private readonly syncLogRepository: SyncLogRepository,
     @InjectQueue(SYNC_BATCH_QUEUE_NAME)
     private readonly batchQueue: Queue<SyncBatchJobData>,
+    @InjectQueue(SYNC_RETRY_QUEUE_NAME)
+    private readonly retryQueue: Queue<SyncRetryJobData>,
     private readonly configService: ConfigService,
   ) {
     super();
-    this.batchSize = this.configService.get<number>('SYNC_BATCH_SIZE', 2000);
+    this.batchSize = this.configService.get<number>('SYNC_BATCH_SIZE', 1000);
+    this.retryDelayMs = this.configService.get<number>(
+      'SYNC_RETRY_DELAY_MS',
+      10 * 60 * 1000,
+    );
   }
 
   async process(job: Job<SyncJobData>): Promise<SyncJobResult> {
@@ -65,12 +75,18 @@ export class SyncProcessor extends WorkerHost {
     try {
       // Callback chamado para cada batch de usuários recebido via streaming
       const onBatch = async (users: LegacyUser[]): Promise<void> => {
+        const callbackStart = Date.now();
         for (const user of users) {
           currentBatch.push(user);
 
           // Quando atingir batchSize, enfileira o batch
           if (currentBatch.length >= this.batchSize) {
+            const enqueueStart = Date.now();
             await this.enqueueBatch(syncLogId, batchNumber, currentBatch);
+            const enqueueTime = Date.now() - enqueueStart;
+            if (enqueueTime > 50) {
+              this.logger.warn('Enqueue lento', { enqueueTime, batchNumber });
+            }
             totalEnqueued += currentBatch.length;
             batchNumber++;
             currentBatch = [];
@@ -90,6 +106,13 @@ export class SyncProcessor extends WorkerHost {
               lastProgressUpdate = now;
             }
           }
+        }
+        const callbackTime = Date.now() - callbackStart;
+        if (callbackTime > 100) {
+          this.logger.warn('Callback onBatch lento', {
+            callbackTime,
+            usersCount: users.length,
+          });
         }
       };
 
@@ -146,6 +169,17 @@ export class SyncProcessor extends WorkerHost {
         durationMs,
       });
 
+      // Agenda retry em background
+      this.scheduleRetry(syncLogId, errorMessage).catch((retryError) => {
+        this.logger.warn('Falha ao agendar retry', {
+          syncLogId,
+          error:
+            retryError instanceof Error
+              ? retryError.message
+              : 'Unknown error',
+        });
+      });
+
       throw error;
     }
   }
@@ -181,6 +215,39 @@ export class SyncProcessor extends WorkerHost {
       syncLogId,
       batchNumber,
       usersCount: users.length,
+    });
+  }
+
+  private async scheduleRetry(
+    syncLogId: number,
+    reason: string,
+  ): Promise<void> {
+    // Verifica se já existe retry pendente (evita duplicatas)
+    const delayed = await this.retryQueue.getDelayed();
+    if (delayed.length > 0) {
+      this.logger.log('Retry já agendado, ignorando nova solicitação', {
+        syncLogId,
+        existingJobId: delayed[0].id,
+      });
+      return;
+    }
+
+    const jobData: SyncRetryJobData = {
+      reason,
+      originalSyncLogId: syncLogId,
+      scheduledAt: new Date().toISOString(),
+    };
+
+    await this.retryQueue.add(SYNC_RETRY_JOB_NAME, jobData, {
+      delay: this.retryDelayMs,
+      removeOnComplete: 1,
+      removeOnFail: 1,
+    });
+
+    this.logger.log('Retry agendado', {
+      syncLogId,
+      delayMs: this.retryDelayMs,
+      delayMinutes: this.retryDelayMs / 60000,
     });
   }
 }

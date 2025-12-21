@@ -34,7 +34,11 @@ export class EnvironmentVariables {
 
   @IsBoolean()
   @IsOptional()
-  @Transform(({ value }) => value !== 'false')
+  @Transform(({ value }) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') return value.toLowerCase() !== 'false';
+    return true;
+  })
   TYPEORM_LOGGING: boolean = true;
 
   // Redis
@@ -97,9 +101,7 @@ export class EnvironmentVariables {
 }
 
 export function validate(config: Record<string, unknown>) {
-  const validatedConfig = plainToInstance(EnvironmentVariables, config, {
-    enableImplicitConversion: true,
-  });
+  const validatedConfig = plainToInstance(EnvironmentVariables, config);
 
   const errors = validateSync(validatedConfig, {
     skipMissingProperties: false,
