@@ -52,9 +52,9 @@ export class LegacyApiClient {
       withRetry(
         async () => this.doStreamingFetch(onBatch),
         {
-          maxAttempts: 3,
-          initialDelayMs: 1000,
-          maxDelayMs: 10000,
+          maxAttempts: 5,
+          initialDelayMs: 2000,
+          maxDelayMs: 30000,
           backoffMultiplier: 2,
         },
         this.logger,

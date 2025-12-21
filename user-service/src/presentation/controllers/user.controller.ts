@@ -10,7 +10,9 @@ import {
   Post,
   Put,
   Query,
+  Res,
 } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 import {
   ApiConflictResponse,
   ApiCreatedResponse,
@@ -19,6 +21,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiProduces,
   ApiTags,
 } from '@nestjs/swagger';
 import { UserService } from '../../application/services';
@@ -28,6 +31,7 @@ import {
   PaginationDto,
   UserResponseDto,
   PaginatedUsersResponseDto,
+  ExportCsvQueryDto,
 } from '../../application/dtos';
 
 @Controller('users')
@@ -42,20 +46,56 @@ export class UserController {
     description: 'Lista de usuários retornada com sucesso',
     type: PaginatedUsersResponseDto,
   })
-  async findAll(@Query() query: PaginationDto): Promise<PaginatedUsersResponseDto> {
+  async findAll(
+    @Query() query: PaginationDto,
+  ): Promise<PaginatedUsersResponseDto> {
     return this.userService.findAll(query);
+  }
+
+  @Get('export/csv')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Exporta usuários em formato CSV' })
+  @ApiProduces('text/csv')
+  @ApiOkResponse({
+    description: 'Arquivo CSV com usuários',
+    schema: {
+      type: 'string',
+      format: 'binary',
+    },
+  })
+  async exportCsv(
+    @Query() query: ExportCsvQueryDto,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/csv',
+      'Content-Disposition': `attachment; filename="users-${Date.now()}.csv"`,
+      'Transfer-Encoding': 'chunked',
+    });
+
+    for await (const csvLine of this.userService.exportUsersCsv(query)) {
+      reply.raw.write(csvLine);
+    }
+
+    reply.raw.end();
   }
 
   @Get(':user_name')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Busca usuário por userName' })
-  @ApiParam({ name: 'user_name', description: 'Nome de usuário', example: 'john_doe' })
+  @ApiParam({
+    name: 'user_name',
+    description: 'Nome de usuário',
+    example: 'john_doe',
+  })
   @ApiOkResponse({
     description: 'Usuário encontrado',
     type: UserResponseDto,
   })
   @ApiNotFoundResponse({ description: 'Usuário não encontrado' })
-  async findByUserName(@Param('user_name') userName: string): Promise<UserResponseDto> {
+  async findByUserName(
+    @Param('user_name') userName: string,
+  ): Promise<UserResponseDto> {
     return this.userService.findByUserName(userName);
   }
 

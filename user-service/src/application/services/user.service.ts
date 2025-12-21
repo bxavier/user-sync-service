@@ -12,8 +12,10 @@ import {
   PaginationDto,
   UserResponseDto,
   PaginatedUsersResponseDto,
+  ExportCsvQueryDto,
 } from '../dtos';
 import { LoggerService } from '../../infrastructure/logger';
+import { User } from '../../domain/entities';
 
 @Injectable()
 export class UserService {
@@ -123,5 +125,44 @@ export class UserService {
     }
 
     this.logger.log('Usuário removido com sucesso', { id });
+  }
+
+  async *exportUsers(
+    query: ExportCsvQueryDto,
+  ): AsyncGenerator<User, void, unknown> {
+    this.logger.log('Exportando usuários para CSV', {
+      createdFrom: query.created_from,
+      createdTo: query.created_to,
+    });
+
+    yield* this.userRepository.findAllForExport({
+      createdFrom: query.created_from,
+      createdTo: query.created_to,
+    });
+  }
+
+  async *exportUsersCsv(
+    query: ExportCsvQueryDto,
+  ): AsyncGenerator<string, void, unknown> {
+    this.logger.log('Exportando usuários para CSV', {
+      createdFrom: query.created_from,
+      createdTo: query.created_to,
+    });
+
+    yield 'id,userName,email,createdAt\n';
+
+    for await (const user of this.userRepository.findAllForExport({
+      createdFrom: query.created_from,
+      createdTo: query.created_to,
+    })) {
+      yield `${user.id},${this.escapeCsvField(user.userName)},${this.escapeCsvField(user.email)},${user.createdAt.toISOString()}\n`;
+    }
+  }
+
+  private escapeCsvField(field: string): string {
+    if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+      return `"${field.replace(/"/g, '""')}"`;
+    }
+    return field;
   }
 }

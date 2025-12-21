@@ -23,6 +23,11 @@ export interface UpdateUserData {
   email?: string;
 }
 
+export interface ExportFilters {
+  createdFrom?: Date;
+  createdTo?: Date;
+}
+
 export interface UpsertUserData {
   legacyId: number;
   userName: string;
@@ -42,4 +47,5 @@ export interface UserRepository {
   softDelete(id: number): Promise<boolean>;
   upsertByLegacyId(data: UpsertUserData): Promise<User>;
   bulkUpsertByUserName(data: UpsertUserData[]): Promise<number>;
+  findAllForExport(filters?: ExportFilters): AsyncGenerator<User, void, unknown>;
 }

@@ -3,6 +3,7 @@ import {
   FastifyAdapter,
   NestFastifyApplication,
 } from '@nestjs/platform-fastify';
+import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { setupSwagger } from './infrastructure/config/swagger.config';
@@ -30,7 +31,8 @@ async function bootstrap() {
 
   setupSwagger(app);
 
-  const port = process.env.PORT ?? 3000;
+  const configService = app.get(ConfigService);
+  const port = configService.get<number>('PORT', 3000);
   await app.listen(port, '0.0.0.0');
 
   logger.log('Application started', { port, docs: '/api/docs' });

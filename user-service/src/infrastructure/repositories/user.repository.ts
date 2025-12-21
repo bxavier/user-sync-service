@@ -9,6 +9,7 @@ import {
   CreateUserData,
   UpdateUserData,
   UpsertUserData,
+  ExportFilters,
 } from '../../domain/repositories/user.repository.interface';
 
 @Injectable()
@@ -125,23 +126,98 @@ export class UserRepositoryImpl implements UserRepository {
       return 0;
     }
 
-    const entities = data.map((item) => ({
-      legacyId: item.legacyId,
-      userName: item.userName,
-      email: item.email,
-      legacyCreatedAt: item.legacyCreatedAt,
-      deleted: item.deleted,
-      deletedAt: item.deleted ? new Date() : null,
-    }));
+    // 1. Deduplica dentro do batch: mantém apenas o registro mais recente por userName
+    const deduped = this.deduplicateByUserName(data);
 
-    // Usa transação explícita para reduzir I/O de disco
+    // 2. Usa SQL raw para UPDATE condicional (só atualiza se legacyCreatedAt for mais recente)
     await this.dataSource.transaction(async (manager) => {
-      await manager.upsert(User, entities, {
-        conflictPaths: ['userName'],
-        skipUpdateIfNoValuesChanged: true,
-      });
+      for (const item of deduped) {
+        const legacyCreatedAtStr = item.legacyCreatedAt.toISOString();
+        const deletedAtStr = item.deleted ? new Date().toISOString() : null;
+
+        // INSERT OR UPDATE condicional: só atualiza se o novo registro for mais recente
+        await manager.query(
+          `
+          INSERT INTO "users" ("legacy_id", "user_name", "email", "legacy_created_at", "deleted", "deleted_at")
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT ("user_name") DO UPDATE SET
+            "legacy_id" = excluded."legacy_id",
+            "email" = excluded."email",
+            "legacy_created_at" = excluded."legacy_created_at",
+            "deleted" = excluded."deleted",
+            "deleted_at" = excluded."deleted_at"
+          WHERE excluded."legacy_created_at" > "users"."legacy_created_at"
+             OR "users"."legacy_created_at" IS NULL
+          `,
+          [
+            item.legacyId,
+            item.userName,
+            item.email,
+            legacyCreatedAtStr,
+            item.deleted ? 1 : 0,
+            deletedAtStr,
+          ],
+        );
+      }
     });
 
-    return data.length;
+    return deduped.length;
+  }
+
+  /**
+   * Deduplica array por userName, mantendo o registro com legacyCreatedAt mais recente
+   */
+  private deduplicateByUserName(data: UpsertUserData[]): UpsertUserData[] {
+    const map = new Map<string, UpsertUserData>();
+
+    for (const item of data) {
+      const existing = map.get(item.userName);
+      if (!existing || item.legacyCreatedAt > existing.legacyCreatedAt) {
+        map.set(item.userName, item);
+      }
+    }
+
+    return Array.from(map.values());
+  }
+
+  async *findAllForExport(
+    filters: ExportFilters = {},
+  ): AsyncGenerator<User, void, unknown> {
+    const batchSize = 1000;
+    let lastId = 0;
+
+    while (true) {
+      const qb = this.repository
+        .createQueryBuilder('user')
+        .where('user.deleted = :deleted', { deleted: false })
+        .andWhere('user.id > :lastId', { lastId });
+
+      if (filters.createdFrom) {
+        qb.andWhere('user.createdAt >= :createdFrom', {
+          createdFrom: filters.createdFrom,
+        });
+      }
+
+      if (filters.createdTo) {
+        qb.andWhere('user.createdAt <= :createdTo', {
+          createdTo: filters.createdTo,
+        });
+      }
+
+      const batch = await qb
+        .orderBy('user.id', 'ASC')
+        .take(batchSize)
+        .getMany();
+
+      if (batch.length === 0) {
+        break;
+      }
+
+      for (const user of batch) {
+        yield user;
+      }
+
+      lastId = batch[batch.length - 1].id;
+    }
   }
 }

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In, LessThan } from 'typeorm';
 import { SyncLog, SyncStatus } from '../../domain/entities';
 import {
   SyncLogRepository,
@@ -66,5 +66,50 @@ export class SyncLogRepositoryImpl implements SyncLogRepository {
       order: { startedAt: 'DESC' },
       take: limit,
     });
+  }
+
+  async findStaleSyncs(staleThresholdMinutes: number): Promise<SyncLog[]> {
+    const thresholdDate = new Date(
+      Date.now() - staleThresholdMinutes * 60 * 1000,
+    );
+
+    return this.repository.find({
+      where: {
+        status: In([
+          SyncStatus.PENDING,
+          SyncStatus.RUNNING,
+          SyncStatus.PROCESSING,
+        ]),
+        startedAt: LessThan(thresholdDate),
+      },
+      order: { startedAt: 'DESC' },
+    });
+  }
+
+  async markStaleAsFailed(
+    staleThresholdMinutes: number,
+    errorMessage: string,
+  ): Promise<number> {
+    const thresholdDate = new Date(
+      Date.now() - staleThresholdMinutes * 60 * 1000,
+    );
+
+    const result = await this.repository.update(
+      {
+        status: In([
+          SyncStatus.PENDING,
+          SyncStatus.RUNNING,
+          SyncStatus.PROCESSING,
+        ]),
+        startedAt: LessThan(thresholdDate),
+      },
+      {
+        status: SyncStatus.FAILED,
+        finishedAt: new Date(),
+        errorMessage,
+      },
+    );
+
+    return result.affected ?? 0;
   }
 }

@@ -1,11 +1,11 @@
 import { Processor, WorkerHost, InjectQueue } from '@nestjs/bullmq';
 import { Inject } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Job, Queue } from 'bullmq';
 import {
   SYNC_QUEUE_NAME,
   SYNC_BATCH_QUEUE_NAME,
   SYNC_BATCH_JOB_NAME,
-  BATCH_SIZE,
 } from './sync.constants';
 import { LoggerService } from '../logger';
 import { LegacyApiClient } from '../legacy';
@@ -30,6 +30,7 @@ export interface SyncJobResult {
 @Processor(SYNC_QUEUE_NAME)
 export class SyncProcessor extends WorkerHost {
   private readonly logger = new LoggerService(SyncProcessor.name);
+  private readonly batchSize: number;
 
   constructor(
     private readonly legacyApiClient: LegacyApiClient,
@@ -37,8 +38,10 @@ export class SyncProcessor extends WorkerHost {
     private readonly syncLogRepository: SyncLogRepository,
     @InjectQueue(SYNC_BATCH_QUEUE_NAME)
     private readonly batchQueue: Queue<SyncBatchJobData>,
+    private readonly configService: ConfigService,
   ) {
     super();
+    this.batchSize = this.configService.get<number>('SYNC_BATCH_SIZE', 2000);
   }
 
   async process(job: Job<SyncJobData>): Promise<SyncJobResult> {
@@ -52,7 +55,7 @@ export class SyncProcessor extends WorkerHost {
     this.logger.log('Iniciando job de sincronização (orquestrador)', {
       syncLogId,
       jobId: job.id,
-      batchSize: BATCH_SIZE,
+      batchSize: this.batchSize,
     });
 
     await this.syncLogRepository.update(syncLogId, {
@@ -65,8 +68,8 @@ export class SyncProcessor extends WorkerHost {
         for (const user of users) {
           currentBatch.push(user);
 
-          // Quando atingir BATCH_SIZE, enfileira o batch
-          if (currentBatch.length >= BATCH_SIZE) {
+          // Quando atingir batchSize, enfileira o batch
+          if (currentBatch.length >= this.batchSize) {
             await this.enqueueBatch(syncLogId, batchNumber, currentBatch);
             totalEnqueued += currentBatch.length;
             batchNumber++;

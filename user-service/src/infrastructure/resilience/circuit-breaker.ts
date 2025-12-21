@@ -23,7 +23,7 @@ export class CircuitBreaker {
     name: string,
     config: Partial<CircuitBreakerConfig> = {},
   ) {
-    this.config = { failureThreshold: 5, timeoutMs: 30000, ...config };
+    this.config = { failureThreshold: 10, timeoutMs: 30000, ...config };
     this.logger = new LoggerService(`CircuitBreaker:${name}`);
   }
 

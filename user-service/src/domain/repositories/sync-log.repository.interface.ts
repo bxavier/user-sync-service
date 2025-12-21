@@ -20,4 +20,15 @@ export interface SyncLogRepository {
   findById(id: number): Promise<SyncLog | null>;
   findLatest(): Promise<SyncLog | null>;
   findAll(limit?: number): Promise<SyncLog[]>;
+  /**
+   * Encontra syncs travadas (status PENDING/RUNNING/PROCESSING há mais de X minutos)
+   */
+  findStaleSyncs(staleThresholdMinutes: number): Promise<SyncLog[]>;
+  /**
+   * Marca syncs travadas como FAILED
+   */
+  markStaleAsFailed(
+    staleThresholdMinutes: number,
+    errorMessage: string,
+  ): Promise<number>;
 }
