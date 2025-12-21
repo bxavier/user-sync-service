@@ -217,3 +217,195 @@ await this.repository.upsert(entities, {
 - Respeita a regra de negócio (unicidade por userName)
 - Permite que usuários do legado sejam "mesclados" por userName
 - Mantém `legacyId` apenas como referência de origem
+
+---
+
+## TDR-009: ConfigModule com Validação Centralizada
+
+**Data**: 2024-12-21
+**Status**: Aprovado
+
+### Contexto
+Aplicação usava `process.env` diretamente em vários lugares. Precisamos de validação centralizada e tipagem forte para variáveis de ambiente.
+
+### Decisão
+Usar `ConfigModule.forRoot` do NestJS com validação via class-validator.
+
+### Implementação
+```typescript
+// env.validation.ts
+export class EnvironmentVariables {
+  @IsString()
+  REDIS_HOST: string;
+
+  @IsInt()
+  @Min(1)
+  @Transform(({ value }) => parseInt(value, 10))
+  REDIS_PORT: number;
+
+  @IsInt()
+  @Min(100)
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value, 10))
+  SYNC_BATCH_SIZE: number = 2000;
+  // ...
+}
+
+export function validate(config: Record<string, unknown>) {
+  const validatedConfig = plainToInstance(EnvironmentVariables, config);
+  const errors = validateSync(validatedConfig);
+  if (errors.length > 0) {
+    throw new Error(`Environment validation failed`);
+  }
+  return validatedConfig;
+}
+
+// app.module.ts
+ConfigModule.forRoot({
+  isGlobal: true,
+  validate,
+})
+```
+
+### Justificativa
+- **Fail-fast**: Aplicação não inicia se env vars obrigatórias estiverem faltando
+- **Tipagem forte**: `ConfigService<EnvironmentVariables>` oferece autocomplete
+- **Valores default**: Definidos na classe, não espalhados pelo código
+- **Validação**: Min/max, tipos, formatos validados automaticamente
+- **Padrão NestJS**: Forma idiomática do framework
+
+### Variáveis Configuráveis
+| Variável | Default | Descrição |
+|----------|---------|-----------|
+| `SYNC_BATCH_SIZE` | 2000 | Usuários por batch |
+| `SYNC_WORKER_CONCURRENCY` | 20 | Workers paralelos |
+| `TYPEORM_LOGGING` | true | Habilita logs SQL |
+| `SYNC_CRON_EXPRESSION` | `0 */6 * * *` | Cron da sync |
+
+---
+
+## TDR-010: Recuperação de Syncs Travadas
+
+**Data**: 2024-12-21
+**Status**: Aprovado
+
+### Contexto
+Syncs podem ficar travadas em status RUNNING/PROCESSING se a aplicação crashar ou for reiniciada durante uma sincronização.
+
+### Decisão
+Implementar 3 mecanismos de recuperação:
+
+1. **Timeout automático**: Ao iniciar nova sync, verifica se há syncs em andamento há mais de 30 min e marca como FAILED
+2. **Recovery no startup**: No `OnModuleInit` do SyncService, marca qualquer sync em andamento como FAILED
+3. **Reset manual**: Endpoint `POST /sync/reset` para forçar reset de sync travada
+
+### Implementação
+```typescript
+// SyncLogRepository
+async markStaleAsFailed(thresholdMinutes: number, errorMessage: string): Promise<number> {
+  const threshold = new Date(Date.now() - thresholdMinutes * 60 * 1000);
+  const result = await this.repository.update(
+    {
+      status: In([SyncStatus.PENDING, SyncStatus.RUNNING, SyncStatus.PROCESSING]),
+      startedAt: LessThan(threshold),
+    },
+    {
+      status: SyncStatus.FAILED,
+      finishedAt: new Date(),
+      errorMessage,
+    },
+  );
+  return result.affected ?? 0;
+}
+
+// SyncService
+async onModuleInit() {
+  await this.syncLogRepository.markStaleAsFailed(0, 'Sync interrompida: aplicação reiniciada');
+}
+```
+
+### Justificativa
+- Evita syncs fantasma bloqueando novas execuções
+- Permite operação autônoma sem intervenção manual
+- Mantém histórico de falhas para auditoria
+
+---
+
+## TDR-011: Lógica de Negócio nos Services (não Controllers)
+
+**Data**: 2024-12-21
+**Status**: Aprovado
+
+### Contexto
+Controllers estavam com lógica de cálculo de métricas (recordsPerSecond, progressPercent, etc) e formatação de dados (CSV).
+
+### Decisão
+Mover toda lógica de negócio para a camada Application (services), deixando controllers apenas como adaptadores HTTP.
+
+### Antes
+```typescript
+// sync.controller.ts - RUIM
+async getStatus() {
+  const syncLog = await this.syncService.getLatestSync();
+  const elapsedMs = syncLog.durationMs ?? (Date.now() - syncLog.startedAt);
+  const recordsPerSecond = syncLog.totalProcessed / (elapsedMs / 1000);
+  // ... mais cálculos
+  return { ...syncLog, recordsPerSecond, progressPercent };
+}
+```
+
+### Depois
+```typescript
+// sync.controller.ts - BOM
+async getStatus() {
+  return this.syncService.getLatestSyncStatus();
+}
+
+// sync.service.ts
+async getLatestSyncStatus(): Promise<SyncStatusDto> {
+  const syncLog = await this.syncLogRepository.findLatest();
+  // ... cálculos aqui
+  return { ...syncLog, recordsPerSecond, progressPercent };
+}
+```
+
+### Justificativa
+- Controllers são thin (apenas delegam)
+- Lógica testável unitariamente no service
+- Reutilizável por outros consumers (CLI, jobs, etc)
+- Separação clara de responsabilidades
+
+---
+
+## TDR-012: Worker Concurrency via OnModuleInit
+
+**Data**: 2024-12-21
+**Status**: Aprovado
+
+### Contexto
+Ao tentar configurar `this.worker.concurrency` no construtor do `SyncBatchProcessor`, recebemos erro: "Worker has not yet been initialized".
+
+### Decisão
+Usar o lifecycle hook `OnModuleInit` para configurar a concurrency do worker após a inicialização completa do módulo.
+
+### Implementação
+```typescript
+@Processor(SYNC_BATCH_QUEUE_NAME)
+export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
+  private readonly workerConcurrency: number;
+
+  constructor(configService: ConfigService) {
+    super();
+    this.workerConcurrency = configService.get<number>('SYNC_WORKER_CONCURRENCY', 20);
+  }
+
+  onModuleInit() {
+    this.worker.concurrency = this.workerConcurrency;
+  }
+}
+```
+
+### Justificativa
+- `WorkerHost` do `@nestjs/bullmq` inicializa o worker após o construtor
+- `OnModuleInit` é chamado quando o módulo está completamente inicializado
+- Permite usar `ConfigService` no construtor e aplicar no momento correto

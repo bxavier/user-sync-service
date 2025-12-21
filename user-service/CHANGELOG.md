@@ -7,9 +7,49 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
-### Added
+## [0.6.5] - 2024-12-21
 
-#### Fase 1: Setup do Projeto
+### Added
+- ConfigModule com validação centralizada de variáveis de ambiente via class-validator
+- Arquivo `env.validation.ts` com classe `EnvironmentVariables` e função `validate()`
+- Validação fail-fast no startup (aplicação não inicia se env vars obrigatórias estiverem faltando)
+- Variável `TYPEORM_LOGGING` para toggle de logs SQL
+- DTOs centralizados: `SyncStatusDto`, `TriggerSyncResponseDto`, `ResetSyncResponseDto`
+- Recuperação de syncs travadas com 3 mecanismos:
+  - Timeout automático (30 min) no `triggerSync`
+  - Recovery no startup via `OnModuleInit` no `SyncService`
+  - Endpoint `POST /sync/reset` para reset manual
+- Método `markStaleAsFailed` no `SyncLogRepository`
+- Endpoint `GET /users/export/csv` com streaming response
+- `ExportCsvQueryDto` com filtros `created_from` e `created_to`
+- `findAllForExport` no repositório (async generator com batches de 1000)
+- `exportUsersCsv` no `UserService` para formatação CSV
+
+### Changed
+- TypeORM, BullMQ, Throttler agora usam `forRootAsync` com ConfigService
+- Lógica de métricas movida de `SyncController` para `SyncService.getLatestSyncStatus()`
+- Lógica de CSV movida de `UserController` para `UserService.exportUsersCsv()`
+- `SyncBatchProcessor` usa `OnModuleInit` para configurar concurrency do worker
+- Controllers agora são "thin" (apenas delegam para services)
+- Variáveis `SYNC_BATCH_SIZE`, `SYNC_WORKER_CONCURRENCY`, `SYNC_CRON_EXPRESSION` configuráveis via env
+- Cron de sync alterado de 5 minutos para 6 horas (`0 */6 * * *`)
+
+### Removed
+- Arquivo `typeorm.config.ts` (configuração inline no AppModule)
+- Constantes `BATCH_SIZE` e `WORKER_CONCURRENCY` de `sync.constants.ts`
+- Uso direto de `process.env` em favor de `ConfigService`
+
+### Fixed
+- Erro "Worker has not yet been initialized" ao configurar concurrency no construtor
+- Syncs ficando em status RUNNING/PROCESSING indefinidamente após crash da aplicação
+- Tabela errada no SQL raw (`"user"` para `"users"`)
+- Nomes de colunas errados no SQL raw (camelCase para snake_case)
+
+---
+
+## Histórico Anterior (Fases 1-6)
+
+### Fase 1: Setup do Projeto
 - Setup inicial do projeto NestJS com Fastify
 - Configuração TypeORM + SQLite
 - Configuração BullMQ + Redis
@@ -20,61 +60,37 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - LoggerService customizado (estende ConsoleLogger do NestJS)
 - TypeORM logger integrado ao formato NestJS
 - Documentação do projeto (.ai/)
-  - agents.md - Boas práticas e diretrizes
-  - architecture.md - Decisões arquiteturais
-  - roadmap.md - Roadmap de desenvolvimento
-  - tech-decisions.md - Log de decisões técnicas
-  - CONTEXT.md - Contexto para novos prompts
 
-#### Fase 2: Domínio e Persistência
+### Fase 2: Domínio e Persistência
 - Entidade `User` com soft delete (campo `deleted` + `deletedAt`)
 - Entidade `SyncLog` com enum `SyncStatus`
 - Interface `UserRepository` + implementação `UserRepositoryImpl`
 - Interface `SyncLogRepository` + implementação `SyncLogRepositoryImpl`
 - Providers centralizados em `repositories.providers.ts`
 
-#### Fase 3: CRUD de Usuários
+### Fase 3: CRUD de Usuários
 - DTOs com validação (`CreateUserDto`, `UpdateUserDto`, `PaginationDto`, `UserResponseDto`)
 - `UserService` com lógica de negócio
 - `UserController` com endpoints REST completos
-  - `GET /users` - Lista com paginação
-  - `GET /users/:user_name` - Busca por user_name
-  - `POST /users` - Cria novo usuário
-  - `PUT /users/:id` - Atualiza usuário
-  - `DELETE /users/:id` - Soft delete
 - `HttpExceptionFilter` global com logging
 - Documentação Swagger via decorators
 
-#### Fase 4: Cliente do Sistema Legado
-- `LegacyApiClient` com axios para consumir API legada (streaming real com `responseType: 'stream'`)
+### Fase 4: Cliente do Sistema Legado
+- `LegacyApiClient` com axios para consumir API legada (streaming real)
 - `withRetry` - Retry com exponential backoff
 - `CircuitBreaker` - Circuit breaker para proteção contra falhas cascata
 - Interface `LegacyUser` para tipagem dos dados do sistema legado
 
-#### Fase 5: Sincronização com BullMQ
+### Fase 5: Sincronização com BullMQ
 - `SyncProcessor` - Orquestrador que recebe streaming e enfileira batches
-- `SyncBatchProcessor` - Worker paralelo (concurrency: 20) que processa batches de 2000 usuários
-- `bulkUpsertByUserName` - Bulk insert/update com transação explícita usando userName como chave única
+- `SyncBatchProcessor` - Worker paralelo (concurrency: 20) que processa batches
+- `bulkUpsertByUserName` - Bulk insert/update com transação explícita
 - `SyncService` com idempotência (verifica PENDING/RUNNING/PROCESSING)
 - `SyncController` com endpoints POST /sync, GET /sync/status, GET /sync/history
-- Cron job para sincronização periódica (a cada 5 minutos)
-- Status `PROCESSING` no enum `SyncStatus` para rastrear fase de batch processing
-- Performance: 1M usuários sincronizados em ~18 minutos (~820 rec/s)
+- Cron job para sincronização periódica
+- Performance: 1M usuários sincronizados em ~18 minutos (~920 rec/s)
 
-#### Fase 6: Melhorias no Endpoint de Status e Otimizações
-- `GET /sync/status` agora retorna métricas detalhadas:
-  - `durationFormatted` - Duração em formato legível (ex: "2m 30s")
-  - `recordsPerSecond` - Taxa de processamento
-  - `estimatedTimeRemaining` - Tempo estimado restante
-  - `progressPercent` - Percentual de progresso
-  - `batchSize` - Tamanho do batch configurado
-  - `workerConcurrency` - Número de workers paralelos
-- Otimizações de performance testadas:
-  - BATCH_SIZE aumentado de 1000 para 2000
-  - WORKER_CONCURRENCY aumentado de 5 para 20
-  - Transação explícita no bulkUpsert para reduzir I/O de disco
-  - Resultado: ~33% mais rápido (de ~27min para ~18min)
-
-### Fixed
-- Corrigido erro de compilação em `LegacyApiClient` (propriedade inexistente no CircuitBreakerConfig)
-- Corrigido método `findLatest` no `SyncLogRepository` (usar find com take:1 em vez de findOne)
+### Fase 6: Exportação CSV e Melhorias
+- Endpoint `GET /users/export/csv` com streaming
+- Métricas detalhadas no endpoint de status
+- Otimizações de performance (batch size, worker concurrency, transações)

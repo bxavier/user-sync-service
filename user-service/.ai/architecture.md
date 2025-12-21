@@ -41,45 +41,82 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
 - **Entities**:
   - `User` - usuário sincronizado (com soft delete via `deleted`/`deletedAt`)
   - `SyncLog` - log de execução de sincronização (com enum `SyncStatus`)
-- **Repository Interfaces** (✅ implementado):
-  - `UserRepository` - findAll, findById, findByUserName, create, update, softDelete, upsertByLegacyId, bulkUpsertByUserName
-  - `SyncLogRepository` - create, update, findById, findLatest, findAll
+- **Repository Interfaces**:
+  - `UserRepository` - findAll, findById, findByUserName, create, update, softDelete, upsertByLegacyId, bulkUpsertByUserName, findAllForExport
+  - `SyncLogRepository` - create, update, findById, findLatest, findAll, markStaleAsFailed
 
 ### Application Layer
-- **Services** (✅ implementado):
-  - `UserService` - CRUD de usuários, validação de unicidade
-  - `SyncService` - enfileiramento de jobs, verificação de idempotência, cron scheduler
-- **DTOs** (✅ implementado):
+- **Services**:
+  - `UserService` - CRUD de usuários, validação de unicidade, exportação CSV
+  - `SyncService` - enfileiramento de jobs, verificação de idempotência, cron scheduler, métricas de status, reset de syncs travadas
+- **DTOs**:
   - `CreateUserDto`, `UpdateUserDto` - entrada com validação
   - `PaginationDto` - paginação
-  - `UserResponseDto`, `PaginatedUsersResponseDto` - saída
+  - `UserResponseDto`, `PaginatedUsersResponseDto` - saída de usuários
+  - `ExportCsvQueryDto` - filtros para exportação CSV
+  - `SyncStatusDto`, `TriggerSyncResponseDto`, `ResetSyncResponseDto` - respostas de sync
 
 ### Infrastructure Layer
-- **Database**: Configuração TypeORM + SQLite (✅ implementado)
-  - `typeorm.config.ts` - configuração do banco
+- **Config**:
+  - `env.validation.ts` - validação centralizada de env vars com class-validator
+  - `swagger.config.ts` - configuração Swagger
+- **Database**:
   - `typeorm-logger.ts` - logger integrado ao NestJS
-- **Repositories** (✅ implementado):
+  - Configuração inline no `AppModule` via `TypeOrmModule.forRootAsync`
+- **Repositories**:
   - `UserRepositoryImpl` - implementação com TypeORM
   - `SyncLogRepositoryImpl` - implementação com TypeORM
   - `repositories.providers.ts` - providers centralizados para DI
-- **Legacy** (✅ implementado):
+- **Legacy**:
   - `LegacyApiClient` - cliente HTTP com axios (streaming real com `responseType: 'stream'`)
   - `LegacyUser` - interface para dados do sistema legado
-- **Resilience** (✅ implementado):
+  - `StreamParser` - parser para JSON concatenado
+- **Resilience**:
   - `withRetry` - função de retry com exponential backoff
   - `CircuitBreaker` - proteção contra falhas cascata
-- **Queue** (✅ implementado):
-  - `sync.constants.ts` - constantes (`SYNC_QUEUE_NAME`, `SYNC_BATCH_QUEUE_NAME`, `BATCH_SIZE`)
+- **Queue**:
+  - `sync.constants.ts` - constantes de nomes de filas
   - `SyncProcessor` - orquestrador que recebe streaming e enfileira batches
-  - `SyncBatchProcessor` - worker paralelo (concurrency: 20) que processa batches de 2000 usuários
-- **Logger**: LoggerService customizado (✅ estende ConsoleLogger)
+  - `SyncBatchProcessor` - worker paralelo (concurrency via env var) que processa batches
+- **Logger**: LoggerService customizado (estende ConsoleLogger)
 
-### Presentation Layer (✅ implementado)
+### Presentation Layer
 - **Controllers**:
-  - `UserController` - GET /users, GET /users/:user_name, POST /users, PUT /users/:id, DELETE /users/:id
-  - `SyncController` - POST /sync, GET /sync/status, GET /sync/history
+  - `UserController` - GET /users, GET /users/export/csv, GET /users/:user_name, POST /users, PUT /users/:id, DELETE /users/:id
+  - `SyncController` - POST /sync, GET /sync/status, GET /sync/history, POST /sync/reset
 - **Filters**:
   - `HttpExceptionFilter` - tratamento global de exceções com logging
+
+## Configuração via Environment
+
+Todas as configurações são validadas no startup via `ConfigModule` + class-validator:
+
+```typescript
+// app.module.ts
+ConfigModule.forRoot({
+  isGlobal: true,
+  validate, // Função de validação
+})
+
+// Módulos usando ConfigService
+TypeOrmModule.forRootAsync({
+  inject: [ConfigService],
+  useFactory: (config) => ({ ... })
+})
+```
+
+### Variáveis de Ambiente
+
+| Variável | Obrigatório | Default | Descrição |
+|----------|-------------|---------|-----------|
+| `REDIS_HOST` | Sim | - | Host do Redis |
+| `REDIS_PORT` | Sim | - | Porta do Redis |
+| `LEGACY_API_URL` | Sim | - | URL da API legada |
+| `LEGACY_API_KEY` | Sim | - | Chave de autenticação |
+| `SYNC_BATCH_SIZE` | Não | 2000 | Usuários por batch |
+| `SYNC_WORKER_CONCURRENCY` | Não | 20 | Workers paralelos |
+| `SYNC_CRON_EXPRESSION` | Não | `0 */6 * * *` | Cron da sync |
+| `TYPEORM_LOGGING` | Não | true | Logs SQL |
 
 ## Padrões de Resiliência
 
@@ -102,6 +139,25 @@ const circuitBreakerConfig = {
 };
 ```
 
+### Recuperação de Syncs Travadas
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Sync Recovery                             │
+├─────────────────────────────────────────────────────────────┤
+│ 1. Timeout Automático (30 min)                              │
+│    - triggerSync() verifica syncs antigas                   │
+│    - Marca como FAILED se > 30 min em andamento             │
+│                                                              │
+│ 2. Recovery no Startup                                       │
+│    - OnModuleInit marca syncs órfãs como FAILED             │
+│    - Qualquer sync em andamento é considerada interrompida  │
+│                                                              │
+│ 3. Reset Manual (POST /sync/reset)                          │
+│    - Força sync atual a ser marcada como FAILED             │
+│    - Permite iniciar nova sync imediatamente                │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ## Fluxo de Sincronização (Distribuído)
 
 ```
@@ -115,7 +171,7 @@ const circuitBreakerConfig = {
                     │  SyncLog     │◀─────status──────────│LegacyApiClient│
                     │  (PROCESSING)│                       │  (stream)    │
                     └──────────────┘                       └──────┬───────┘
-                                                                  │ batch (1000)
+                                                                  │ batch (2000)
                                                                   ▼
                                                           ┌──────────────┐
                                                           │ Batch Queue  │
@@ -136,16 +192,39 @@ const circuitBreakerConfig = {
                                                           └──────────────┘
 ```
 
-1. `POST /sync` ou Cron Job (a cada 5 min) chama `SyncService.triggerSync()`
-2. SyncService verifica idempotência (se há sync PENDING/RUNNING/PROCESSING, retorna existente)
-3. Cria SyncLog com status PENDING e enfileira job no BullMQ (`user-sync`)
-4. SyncProcessor consome job, atualiza status para RUNNING
-5. LegacyApiClient faz streaming real com axios (`responseType: 'stream'`)
-6. A cada 2000 usuários, enfileira um job na fila `user-sync-batch`
-7. Quando streaming termina, atualiza SyncLog para status PROCESSING
-8. SyncBatchProcessor processa batches em paralelo (concurrency: 20)
-9. Cada batch usa `bulkUpsertByUserName` com transação explícita (deduplicação por userName)
-10. Performance: 1M usuários em ~18 minutos (~820 rec/s)
+### Etapas do Fluxo
+
+1. `POST /sync` ou Cron Job (a cada 6h) chama `SyncService.triggerSync()`
+2. SyncService verifica syncs travadas (timeout 30 min) e marca como FAILED
+3. SyncService verifica idempotência (se há sync PENDING/RUNNING/PROCESSING, retorna existente)
+4. Cria SyncLog com status PENDING e enfileira job no BullMQ (`user-sync`)
+5. SyncProcessor consome job, atualiza status para RUNNING
+6. LegacyApiClient faz streaming real com axios (`responseType: 'stream'`)
+7. A cada 2000 usuários (configurável), enfileira um job na fila `user-sync-batch`
+8. Quando streaming termina, atualiza SyncLog para status PROCESSING
+9. SyncBatchProcessor processa batches em paralelo (concurrency: 20, configurável)
+10. Cada batch usa `bulkUpsertByUserName` com transação explícita (deduplicação por userName)
+11. Performance: 1M usuários em ~18 minutos (~920 rec/s)
+
+## Endpoints da API
+
+### Users
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| GET | /users | Lista usuários paginados |
+| GET | /users/export/csv | Exporta usuários em CSV (streaming) |
+| GET | /users/:user_name | Busca usuário por userName |
+| POST | /users | Cria novo usuário |
+| PUT | /users/:id | Atualiza usuário |
+| DELETE | /users/:id | Soft delete de usuário |
+
+### Sync
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| POST | /sync | Inicia sincronização |
+| GET | /sync/status | Status da última sync (com métricas) |
+| GET | /sync/history | Histórico de sincronizações |
+| POST | /sync/reset | Reseta sync travada |
 
 ## Decisões Técnicas
 
@@ -159,3 +238,6 @@ const circuitBreakerConfig = {
 | Parallel Workers (20x) | Processamento distribuído para alta performance |
 | Transação Explícita | Reduz I/O de disco no SQLite (fsync único por batch) |
 | Bulk Upsert | Operações em lote para reduzir I/O de banco |
+| ConfigModule + Validation | Fail-fast para env vars inválidas |
+| OnModuleInit Recovery | Recuperação automática de syncs órfãs no startup |
+| Controllers Thin | Lógica de negócio apenas nos services |

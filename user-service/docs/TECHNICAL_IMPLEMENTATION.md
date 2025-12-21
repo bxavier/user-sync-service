@@ -12,6 +12,8 @@ Este documento explica, passo a passo, como cada parte do User Service foi imple
 4. [Fase 3: CRUD de Usuários](#fase-3-crud-de-usuários)
 5. [Fase 4: Integração com Sistema Legado](#fase-4-integração-com-sistema-legado)
 6. [Fase 5: Sincronização Automática](#fase-5-sincronização-automática)
+7. [Fase 6: Exportação CSV](#fase-6-exportação-csv)
+8. [Fase 6.5: Refatoração ConfigModule](#fase-65-refatoração-configmodule)
 
 ---
 
@@ -310,7 +312,7 @@ Serviço com a lógica de negócio:
 - `triggerSync()`: Verifica idempotência e enfileira job
 - `getLatestSync()`: Retorna última sincronização
 - `getSyncHistory()`: Lista histórico
-- `handleScheduledSync()`: Cron job a cada 5 minutos
+- `handleScheduledSync()`: Cron job a cada 6 horas (configurável via env)
 
 **5. SyncController**
 
@@ -319,15 +321,17 @@ Endpoints:
 | Método | Rota | O que faz |
 |--------|------|-----------|
 | POST | `/sync` | Dispara sincronização |
-| GET | `/sync/status` | Status da última sync |
+| GET | `/sync/status` | Status da última sync (com métricas) |
 | GET | `/sync/history` | Lista histórico |
+| POST | `/sync/reset` | Reseta sync travada |
 
 ### Garantias implementadas
 
 - **Idempotência**: Verifica PENDING/RUNNING/PROCESSING antes de criar novo job
 - **Deduplicação**: `bulkUpsertByUserName` usa userName como chave única
 - **Rastreabilidade**: SyncLog com status PENDING → RUNNING → PROCESSING → COMPLETED/FAILED
-- **Performance**: 1M usuários em ~27 minutos (streaming + batch + parallel workers)
+- **Recuperação de travadas**: 3 mecanismos (timeout 30min, recovery no startup, reset manual)
+- **Performance**: 1M usuários em ~18 minutos (streaming + batch + 20 workers paralelos)
 
 ### Arquivos criados
 
@@ -335,37 +339,309 @@ Endpoints:
 src/
 ├── infrastructure/
 │   └── queue/
-│       ├── sync.constants.ts        # SYNC_QUEUE_NAME, SYNC_BATCH_QUEUE_NAME, BATCH_SIZE
+│       ├── sync.constants.ts        # SYNC_QUEUE_NAME, SYNC_BATCH_QUEUE_NAME
 │       ├── sync.processor.ts        # Orquestrador (streaming + batch queueing)
-│       ├── sync-batch.processor.ts  # Workers paralelos (concurrency: 5)
+│       ├── sync-batch.processor.ts  # Workers paralelos (concurrency: 20)
 │       └── index.ts
 ├── application/
-│   └── services/sync.service.ts     # Idempotência + cron job
+│   └── services/sync.service.ts     # Idempotência + cron + recovery
 └── presentation/
     └── controllers/sync.controller.ts
 ```
 
 ---
 
+## Fase 6: Exportação CSV
+
+**Status**: Concluído
+
+### O que fizemos
+
+Implementamos exportação de usuários em formato CSV com streaming para suportar grandes volumes de dados.
+
+**1. Endpoint de Exportação**
+
+`GET /users/export/csv` com suporte a filtros:
+- `created_from`: Data inicial (ISO 8601)
+- `created_to`: Data final (ISO 8601)
+
+Retorna um arquivo CSV com streaming response - não carrega todos os dados em memória.
+
+**2. ExportCsvQueryDto**
+
+DTO para validação dos parâmetros de filtro:
+
+```typescript
+@IsOptional()
+@IsDateString()
+created_from?: string;
+
+@IsOptional()
+@IsDateString()
+created_to?: string;
+```
+
+**3. findAllForExport no Repositório**
+
+Async generator que retorna usuários em batches de 1000:
+
+```typescript
+async *findAllForExport(filters: ExportFilters): AsyncGenerator<User[]> {
+  let offset = 0;
+  const batchSize = 1000;
+
+  while (true) {
+    const users = await this.repository.find({
+      where: this.buildWhereClause(filters),
+      take: batchSize,
+      skip: offset,
+    });
+
+    if (users.length === 0) break;
+    yield users;
+    offset += batchSize;
+  }
+}
+```
+
+**4. Lógica de CSV no UserService**
+
+A formatação do CSV fica no service, não no controller:
+
+```typescript
+async *exportUsersCsv(filters: ExportFilters): AsyncGenerator<string> {
+  yield 'id,userName,email,legacyId,createdAt\n'; // Header
+
+  for await (const batch of this.userRepository.findAllForExport(filters)) {
+    for (const user of batch) {
+      yield `${user.id},${user.userName},${user.email},${user.legacyId},${user.createdAt}\n`;
+    }
+  }
+}
+```
+
+### Arquivos principais
+
+```
+src/
+├── application/
+│   ├── dtos/export-csv-query.dto.ts  # Filtros com validação
+│   └── services/user.service.ts       # exportUsersCsv()
+├── domain/
+│   └── repositories/user.repository.interface.ts  # findAllForExport()
+├── infrastructure/
+│   └── repositories/user.repository.ts  # Implementação com batches
+└── presentation/
+    └── controllers/user.controller.ts  # GET /users/export/csv
+```
+
+---
+
+## Fase 6.5: Refatoração ConfigModule
+
+**Status**: Concluído
+
+### O que fizemos
+
+Refatoramos toda a configuração do projeto para usar o padrão NestJS idiomático com validação centralizada.
+
+**1. ConfigModule com Validação**
+
+Criamos `env.validation.ts` com uma classe que valida todas as variáveis de ambiente no startup:
+
+```typescript
+export class EnvironmentVariables {
+  @IsString()
+  REDIS_HOST: string;
+
+  @IsInt()
+  @Min(1)
+  @Transform(({ value }) => parseInt(value, 10))
+  REDIS_PORT: number;
+
+  @IsInt()
+  @Min(100)
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value, 10))
+  SYNC_BATCH_SIZE: number = 2000;
+
+  // ... outras variáveis
+}
+
+export function validate(config: Record<string, unknown>) {
+  const validatedConfig = plainToInstance(EnvironmentVariables, config);
+  const errors = validateSync(validatedConfig);
+  if (errors.length > 0) {
+    throw new Error(`Environment validation failed`);
+  }
+  return validatedConfig;
+}
+```
+
+A aplicação **não inicia** se env vars obrigatórias estiverem faltando (fail-fast).
+
+**2. Migração para forRootAsync**
+
+Todos os módulos agora usam `forRootAsync` com `ConfigService`:
+
+```typescript
+// Antes (ruim)
+TypeOrmModule.forRoot({
+  host: process.env.DATABASE_PATH,
+})
+
+// Depois (bom)
+TypeOrmModule.forRootAsync({
+  inject: [ConfigService],
+  useFactory: (config: ConfigService) => ({
+    database: config.get('DATABASE_PATH'),
+  }),
+})
+```
+
+Módulos migrados:
+- TypeOrmModule
+- BullModule
+- ThrottlerModule
+
+**3. Recuperação de Syncs Travadas**
+
+Implementamos 3 mecanismos para evitar syncs fantasma:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Sync Recovery                            │
+├─────────────────────────────────────────────────────────────┤
+│ 1. Timeout Automático (30 min)                              │
+│    - triggerSync() verifica syncs antigas                   │
+│    - Marca como FAILED se > 30 min em andamento             │
+│                                                             │
+│ 2. Recovery no Startup                                      │
+│    - OnModuleInit marca syncs órfãs como FAILED             │
+│    - Qualquer sync em andamento é considerada interrompida  │
+│                                                             │
+│ 3. Reset Manual (POST /sync/reset)                          │
+│    - Força sync atual a ser marcada como FAILED             │
+│    - Permite iniciar nova sync imediatamente                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**4. Controllers Thin**
+
+Movemos toda lógica de negócio dos controllers para os services:
+
+```typescript
+// Antes (ruim) - Controller com lógica
+@Get('status')
+async getStatus() {
+  const syncLog = await this.syncService.getLatestSync();
+  const elapsedMs = syncLog.durationMs ?? (Date.now() - syncLog.startedAt);
+  const recordsPerSecond = syncLog.totalProcessed / (elapsedMs / 1000);
+  // ... mais cálculos
+  return { ...syncLog, recordsPerSecond };
+}
+
+// Depois (bom) - Controller só delega
+@Get('status')
+async getStatus(): Promise<SyncStatusDto> {
+  return this.syncService.getLatestSyncStatus();
+}
+```
+
+**5. Worker Concurrency via OnModuleInit**
+
+O BullMQ `WorkerHost` inicializa o worker após o construtor, então configuramos a concurrency no lifecycle hook:
+
+```typescript
+@Processor(SYNC_BATCH_QUEUE_NAME)
+export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
+  private readonly workerConcurrency: number;
+
+  constructor(configService: ConfigService) {
+    super();
+    this.workerConcurrency = configService.get<number>('SYNC_WORKER_CONCURRENCY', 20);
+  }
+
+  onModuleInit() {
+    this.worker.concurrency = this.workerConcurrency;
+  }
+}
+```
+
+**6. DTOs Centralizados**
+
+Criamos DTOs para todas as respostas de sync:
+- `SyncStatusDto`: Status com métricas (recordsPerSecond, progressPercent, etc.)
+- `TriggerSyncResponseDto`: Resposta do POST /sync
+- `ResetSyncResponseDto`: Resposta do POST /sync/reset
+
+### Arquivos principais
+
+```
+src/
+├── infrastructure/
+│   └── config/
+│       └── env.validation.ts  # Validação centralizada
+├── application/
+│   └── dtos/
+│       ├── sync-status.dto.ts
+│       ├── trigger-sync-response.dto.ts
+│       └── reset-sync-response.dto.ts
+└── app.module.ts  # forRootAsync em todos os módulos
+```
+
+### Arquivos removidos
+
+- `typeorm.config.ts` - Configuração agora inline no AppModule
+- Constantes `BATCH_SIZE` e `WORKER_CONCURRENCY` - Agora via env vars
+
+---
+
 ## Variáveis de Ambiente
 
-Crie um arquivo `.env` na raiz do projeto:
+Todas as variáveis são validadas no startup via `class-validator`. A aplicação não inicia se variáveis obrigatórias estiverem faltando.
+
+| Variável | Obrigatório | Default | Descrição |
+|----------|-------------|---------|-----------|
+| `NODE_ENV` | Não | development | Ambiente (development, production, test) |
+| `PORT` | Não | 3000 | Porta do servidor |
+| `DATABASE_PATH` | Não | ./data/database.sqlite | Caminho do banco SQLite |
+| `TYPEORM_LOGGING` | Não | true | Habilita logs SQL |
+| `REDIS_HOST` | **Sim** | - | Host do Redis |
+| `REDIS_PORT` | **Sim** | - | Porta do Redis |
+| `LEGACY_API_URL` | **Sim** | - | URL da API legada |
+| `LEGACY_API_KEY` | **Sim** | - | Chave de autenticação |
+| `SYNC_BATCH_SIZE` | Não | 2000 | Usuários por batch |
+| `SYNC_WORKER_CONCURRENCY` | Não | 20 | Workers paralelos |
+| `SYNC_CRON_EXPRESSION` | Não | `0 */6 * * *` | Cron da sync (a cada 6h) |
+| `SYNC_RETRY_ATTEMPTS` | Não | 3 | Tentativas de retry |
+| `SYNC_RETRY_DELAY` | Não | 1000 | Delay inicial do retry (ms) |
+| `RATE_LIMIT_TTL` | Não | 60 | TTL do rate limiting (s) |
+| `RATE_LIMIT_MAX` | Não | 100 | Max requests por TTL |
+
+Exemplo de `.env`:
 
 ```env
 # Servidor
 PORT=3000
+NODE_ENV=development
 
 # Banco
 DATABASE_PATH=./data/database.sqlite
+TYPEORM_LOGGING=true
 
-# Redis (pra fila de jobs)
+# Redis (obrigatório)
 REDIS_HOST=localhost
 REDIS_PORT=6379
 
-# API Legada
+# API Legada (obrigatório)
 LEGACY_API_URL=http://localhost:3001
 LEGACY_API_KEY=test-api-key-2024
-LEGACY_API_TIMEOUT=30000
+
+# Sync (opcional - valores default são bons)
+SYNC_BATCH_SIZE=2000
+SYNC_WORKER_CONCURRENCY=20
+SYNC_CRON_EXPRESSION=0 */6 * * *
 
 # Rate Limiting
 RATE_LIMIT_TTL=60
@@ -393,8 +669,15 @@ npm run start:dev
 
 ## Próximos Passos
 
-Depois da Fase 5, ainda falta:
+Depois da Fase 6.5, ainda falta:
 
-- **Fase 6**: Exportação CSV (`GET /users/export/csv`)
-- **Fase 7**: Testes, health check, melhorias de observabilidade
-- **Fase 8**: Documentação final e revisão
+- **Fase 7**: Qualidade e Observabilidade
+  - Health check endpoint (`GET /health`)
+  - Testes unitários e de integração
+  - Coverage > 70%
+
+- **Fase 8**: Documentação e Entrega
+  - README.md completo
+  - docs/AWS_ARCHITECTURE.md
+  - docs/OPTIMIZATIONS.md
+  - Revisão final de código

@@ -18,7 +18,8 @@
 | 3 | ✅ Concluído | CRUD de Usuários |
 | 4 | ✅ Concluído | Cliente do Sistema Legado |
 | 5 | ✅ Concluído | Sincronização com BullMQ |
-| 6 | Pendente | Exportação CSV |
+| 6 | ✅ Concluído | Exportação CSV |
+| 6.5 | ✅ Concluído | Refatoração ConfigModule |
 | 7 | Pendente | Qualidade e Observabilidade |
 | 8 | Pendente | Documentação e Entrega |
 
@@ -98,31 +99,69 @@ Consegue consumir stream mesmo com erros simulados
 ### Tarefas
 - [x] Configurar BullMQ Queue (`SYNC_QUEUE_NAME`, `SYNC_BATCH_QUEUE_NAME`)
 - [x] Criar `SyncProcessor` (orquestrador que recebe streaming e enfileira batches)
-- [x] Criar `SyncBatchProcessor` (worker paralelo com concurrency: 5)
+- [x] Criar `SyncBatchProcessor` (worker paralelo com concurrency: 20)
 - [x] Lógica de deduplicação por `userName` (via `bulkUpsertByUserName`)
 - [x] Histórico/log de execuções (SyncLog com status PENDING/RUNNING/PROCESSING/COMPLETED/FAILED)
 - [x] Endpoint `POST /sync` (retorna 202 Accepted)
 - [x] Endpoints auxiliares `GET /sync/status` e `GET /sync/history`
-- [x] Cron job para sync periódico (a cada 5 minutos via `@Cron`)
+- [x] Cron job para sync periódico (a cada 6 horas via `@Cron`, configurável via env)
 - [x] Garantir idempotência (verifica se já existe sync PENDING/RUNNING/PROCESSING)
 - [x] Streaming real com axios (`responseType: 'stream'`) e backpressure
-- [x] Batch processing (1000 usuários por job) para suportar 1M+ registros
+- [x] Batch processing (2000 usuários por job) para suportar 1M+ registros
+- [x] Recuperação de syncs travadas:
+  - [x] Timeout automático (30 min) no `triggerSync`
+  - [x] Recovery no startup via `OnModuleInit`
+  - [x] Endpoint `POST /sync/reset` para reset manual
 
 ### Critério de Conclusão
-1 milhão de usuários sincronizados em ~27 minutos, sem duplicatas
+1 milhão de usuários sincronizados em ~18 minutos, sem duplicatas, com recuperação automática de syncs travadas
 
 ---
 
 ## Fase 6: Exportação CSV
-**Status**: Pendente
+**Status**: ✅ Concluído
 
 ### Tarefas
-- [ ] Endpoint `GET /users/export/csv`
-- [ ] Filtros `created_from`, `created_to`
-- [ ] Streaming response
+- [x] Endpoint `GET /users/export/csv`
+- [x] Filtros `created_from`, `created_to`
+- [x] Streaming response com cursor-based pagination
+- [x] `ExportCsvQueryDto` com validação de datas
+- [x] `findAllForExport` no repositório (async generator com batches de 1000)
+- [x] Lógica de formatação CSV movida para `UserService`
 
 ### Critério de Conclusão
 Download de CSV com filtros funcionando
+
+---
+
+## Fase 6.5: Refatoração ConfigModule
+**Status**: ✅ Concluído
+
+### Tarefas
+- [x] Implementar `ConfigModule.forRoot` com validação via class-validator
+- [x] Criar `env.validation.ts` com `EnvironmentVariables` class e função `validate()`
+- [x] Migrar `TypeOrmModule` para `forRootAsync` com `ConfigService`
+- [x] Migrar `BullModule` para `forRootAsync` com `ConfigService`
+- [x] Migrar `ThrottlerModule` para `forRootAsync` com `ConfigService`
+- [x] Migrar `main.ts` para usar `ConfigService` para PORT
+- [x] Migrar `SyncProcessor` para usar `ConfigService` para BATCH_SIZE
+- [x] Migrar `SyncBatchProcessor` para usar `ConfigService` para WORKER_CONCURRENCY
+- [x] Usar `OnModuleInit` para configurar concurrency do worker (evita erro de inicialização)
+- [x] Mover lógica de métricas de `SyncController` para `SyncService`
+- [x] Mover lógica de CSV de `UserController` para `UserService`
+- [x] Criar DTOs: `SyncStatusDto`, `TriggerSyncResponseDto`, `ResetSyncResponseDto`
+- [x] Remover `typeorm.config.ts` (config inline no AppModule)
+- [x] Remover constantes `BATCH_SIZE` e `WORKER_CONCURRENCY` de `sync.constants.ts`
+- [x] Adicionar toggle `TYPEORM_LOGGING` para logs do ORM
+
+### Justificativa
+- Validação centralizada de env vars no startup (fail-fast)
+- Padrão NestJS idiomático com `ConfigService`
+- Lógica de negócio nos services (controllers apenas delegam)
+- Configurações operacionais via env vars (sem rebuild para ajustar)
+
+### Critério de Conclusão
+Aplicação inicia com validação de env vars, módulos usando ConfigService, controllers sem lógica de negócio
 
 ---
 
@@ -131,7 +170,7 @@ Download de CSV com filtros funcionando
 
 ### Tarefas
 - [ ] Health check endpoint (`GET /health`)
-- [ ] Rate limiting (@nestjs/throttler)
+- [ ] Rate limiting (@nestjs/throttler) - já configurado
 - [ ] Swagger completo
 - [ ] Testes unitários
 - [ ] Testes de integração com mocks
