@@ -20,7 +20,7 @@
 | 5 | ✅ Concluído | Sincronização com BullMQ |
 | 6 | ✅ Concluído | Exportação CSV |
 | 6.5 | ✅ Concluído | Refatoração ConfigModule |
-| 7 | Pendente | Qualidade e Observabilidade |
+| 7 | 🔄 Em andamento | Qualidade e Observabilidade |
 | 8 | Pendente | Documentação e Entrega |
 
 ---
@@ -166,11 +166,15 @@ Aplicação inicia com validação de env vars, módulos usando ConfigService, c
 ---
 
 ## Fase 7: Qualidade e Observabilidade
-**Status**: Pendente
+**Status**: Em andamento
 
 ### Tarefas
-- [ ] Health check endpoint (`GET /health`)
-- [ ] Rate limiting (@nestjs/throttler) - já configurado
+- [x] Health check endpoints (`GET /health` e `GET /health/details`)
+  - `GET /health`: Liveness probe simples para load balancers (rate limit global)
+  - `GET /health/details`: Readiness probe com detalhes para observabilidade (rate limit: 10 req/min)
+  - Componentes verificados: Database, Redis, API Legada, Sistema, Filas
+  - Status: healthy, degraded, unhealthy
+  - HTTP 503 quando componentes críticos falham
 - [ ] Swagger completo
 - [ ] Testes unitários
 - [ ] Testes de integração com mocks

@@ -409,3 +409,73 @@ export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
 - `WorkerHost` do `@nestjs/bullmq` inicializa o worker após o construtor
 - `OnModuleInit` é chamado quando o módulo está completamente inicializado
 - Permite usar `ConfigService` no construtor e aplicar no momento correto
+
+---
+
+## TDR-013: Health Check com Dois Endpoints
+
+**Data**: 2025-12-21
+**Status**: Aprovado
+
+### Contexto
+Precisamos de health checks para observabilidade com ferramentas como Datadog e Zabbix, além de suporte a liveness/readiness probes do Kubernetes.
+
+### Decisão
+Implementar dois endpoints de health check:
+1. `GET /health` - Liveness probe simples e rápido
+2. `GET /health/details` - Readiness probe com detalhes completos
+
+### Implementação
+
+**Arquitetura:**
+```
+HealthController
+    └── HealthService
+            ├── checkDatabase() → DataSource.query('SELECT 1')
+            ├── checkRedis() → Queue.client.ping()
+            ├── checkLegacyApi() → axios.head()
+            ├── getQueueStats() → Queue.getJobCounts()
+            └── getLastSync() → DataSource.query()
+```
+
+**Lógica de status:**
+- `healthy`: Todos os componentes críticos (DB, Redis) OK
+- `degraded`: Componentes não-críticos (API legada) com problema
+- `unhealthy`: Componentes críticos falharam → HTTP 503
+
+**Rate limiting:**
+- `/health`: Rate limit global (100 req/min)
+- `/health/details`: Rate limit restritivo (10 req/min) via `@Throttle`
+
+**Timeouts:**
+- Cada verificação de componente tem timeout de 3s para evitar bloqueio
+
+### Exemplo de resposta `/health/details`
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-01-15T10:30:00.000Z",
+  "version": "1.0.0",
+  "uptime": 86400,
+  "uptimeFormatted": "1d 0h 0m",
+  "components": {
+    "database": { "status": "healthy", "latencyMs": 2 },
+    "redis": { "status": "healthy", "latencyMs": 1 },
+    "legacyApi": { "status": "degraded", "latencyMs": 150 }
+  },
+  "system": {
+    "memoryUsage": { "heapUsed": 52428800, "heapTotal": 67108864 },
+    "cpuUsage": { "user": 1234567, "system": 987654 }
+  },
+  "sync": {
+    "lastSync": { "id": 42, "status": "COMPLETED" },
+    "queueStats": { "waiting": 0, "active": 0, "completed": 1500 }
+  }
+}
+```
+
+### Justificativa
+- **Dois endpoints**: Separação entre liveness (rápido, para load balancers) e readiness (completo, para observabilidade)
+- **Rate limit restritivo**: Evita abuso do endpoint detalhado
+- **Componentes críticos vs não-críticos**: API legada indisponível não deve marcar o serviço como unhealthy
+- **Formato genérico**: Compatível com Datadog, Zabbix e outras ferramentas de monitoramento

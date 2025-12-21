@@ -49,12 +49,14 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
 - **Services**:
   - `UserService` - CRUD de usuários, validação de unicidade, exportação CSV
   - `SyncService` - enfileiramento de jobs, verificação de idempotência, cron scheduler, métricas de status, reset de syncs travadas
+  - `HealthService` - verificação de componentes (Database, Redis, API Legada), métricas do sistema (memória, CPU, uptime), estatísticas das filas
 - **DTOs**:
   - `CreateUserDto`, `UpdateUserDto` - entrada com validação
   - `PaginationDto` - paginação
   - `UserResponseDto`, `PaginatedUsersResponseDto` - saída de usuários
   - `ExportCsvQueryDto` - filtros para exportação CSV
   - `SyncStatusDto`, `TriggerSyncResponseDto`, `ResetSyncResponseDto` - respostas de sync
+  - `HealthResponseDto`, `HealthDetailsResponseDto`, `ComponentHealthDto` - respostas de health check
 
 ### Infrastructure Layer
 - **Config**:
@@ -84,6 +86,7 @@ Serviço que sincroniza dados de um sistema legado instável e expõe endpoints 
 - **Controllers**:
   - `UserController` - GET /users, GET /users/export/csv, GET /users/:user_name, POST /users, PUT /users/:id, DELETE /users/:id
   - `SyncController` - POST /sync, GET /sync/status, GET /sync/history, POST /sync/reset
+  - `HealthController` - GET /health (liveness), GET /health/details (readiness com detalhes)
 - **Filters**:
   - `HttpExceptionFilter` - tratamento global de exceções com logging
 
@@ -225,6 +228,24 @@ const circuitBreakerConfig = {
 | GET | /sync/status | Status da última sync (com métricas) |
 | GET | /sync/history | Histórico de sincronizações |
 | POST | /sync/reset | Reseta sync travada |
+
+### Health
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| GET | /health | Liveness probe (simples, rápido) |
+| GET | /health/details | Readiness probe com detalhes (rate limit: 10 req/min) |
+
+**Componentes verificados no `/health/details`:**
+- Database (SQLite) - latência, status
+- Redis - latência, status
+- API Legada - latência, status (degraded se indisponível)
+- Sistema - memória, CPU, uptime
+- Filas - jobs waiting, active, completed, failed, delayed
+
+**Status possíveis:**
+- `healthy` - Todos os componentes críticos OK
+- `degraded` - Componentes não-críticos com problema (ex: API legada)
+- `unhealthy` - Componentes críticos falharam (HTTP 503)
 
 ## Decisões Técnicas
 

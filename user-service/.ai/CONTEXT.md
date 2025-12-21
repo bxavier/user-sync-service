@@ -86,10 +86,19 @@ Leia os seguintes arquivos de contexto antes de continuar o desenvolvimento:
 - [x] Removido `typeorm.config.ts` (config inline no AppModule)
 - [x] Toggle para logs do TypeORM via `TYPEORM_LOGGING`
 
-## Tarefas Pendentes (Fase 7 - Qualidade e Observabilidade)
+**Fase 7 (Qualidade e Observabilidade)**: Em andamento
 
-- [ ] Health check endpoint (`GET /health`)
-- [ ] Rate limiting (@nestjs/throttler - já configurado)
+- [x] Health check endpoints (`GET /health` e `GET /health/details`)
+  - Liveness probe simples (`/health`) para load balancers
+  - Readiness probe detalhado (`/health/details`) para observabilidade
+  - Verifica: Database, Redis, API Legada, Sistema (memória, CPU, uptime), Filas
+  - Rate limit restritivo no endpoint detalhado (10 req/min)
+- [ ] Swagger completo
+- [ ] Testes unitários
+- [ ] Testes de integração
+
+## Tarefas Pendentes
+
 - [ ] Swagger completo
 - [ ] Testes unitários
 - [ ] Testes de integração
@@ -114,7 +123,8 @@ user-service/
 │   │   ├── services/
 │   │   │   ├── index.ts
 │   │   │   ├── user.service.ts          # UserService (CRUD + CSV export)
-│   │   │   └── sync.service.ts          # SyncService (enfileiramento + cron + reset + status metrics)
+│   │   │   ├── sync.service.ts          # SyncService (enfileiramento + cron + reset + status metrics)
+│   │   │   └── health.service.ts        # HealthService (verificação de componentes)
 │   │   └── dtos/
 │   │       ├── index.ts
 │   │       ├── create-user.dto.ts       # CreateUserDto
@@ -122,7 +132,8 @@ user-service/
 │   │       ├── pagination.dto.ts        # PaginationDto
 │   │       ├── user-response.dto.ts     # UserResponseDto, PaginatedUsersResponseDto
 │   │       ├── export-csv-query.dto.ts  # ExportCsvQueryDto
-│   │       └── sync-response.dto.ts     # SyncStatusDto, TriggerSyncResponseDto, ResetSyncResponseDto
+│   │       ├── sync-response.dto.ts     # SyncStatusDto, TriggerSyncResponseDto, ResetSyncResponseDto
+│   │       └── health-response.dto.ts   # HealthResponseDto, HealthDetailsResponseDto, ComponentHealthDto
 │   ├── infrastructure/
 │   │   ├── config/
 │   │   │   ├── index.ts                 # Barrel exports
@@ -156,7 +167,8 @@ user-service/
 │       ├── controllers/
 │       │   ├── index.ts
 │       │   ├── user.controller.ts       # UserController (CRUD + CSV export)
-│       │   └── sync.controller.ts       # SyncController (POST /sync, GET /sync/status, POST /sync/reset)
+│       │   ├── sync.controller.ts       # SyncController (POST /sync, GET /sync/status, POST /sync/reset)
+│       │   └── health.controller.ts     # HealthController (GET /health, GET /health/details)
 │       └── filters/
 │           ├── index.ts
 │           └── http-exception.filter.ts # HttpExceptionFilter global

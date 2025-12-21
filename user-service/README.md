@@ -74,6 +74,18 @@ docker-compose up --build
 | GET | `/sync/history` | Lista histórico de sincronizações |
 | POST | `/sync/reset` | Reseta sync travada |
 
+### Health Check
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/health` | Liveness probe (simples, para load balancers) |
+| GET | `/health/details` | Readiness probe com detalhes (para observabilidade) |
+
+**Status possíveis:**
+- `healthy` - Todos os componentes OK
+- `degraded` - Componentes não-críticos com problema
+- `unhealthy` - Componentes críticos falharam (HTTP 503)
+
 ## Variáveis de ambiente
 
 ```env
@@ -166,5 +178,6 @@ O sistema de sincronização foi otimizado para processar **1 milhão de usuári
 - [x] Fase 6: Exportação CSV
 - [x] Fase 6.5: Refatoração ConfigModule
 - [x] Fase 7: Otimizações de performance
-- [ ] Fase 8: Testes e observabilidade
-- [ ] Fase 9: Documentação final
+- [x] Fase 8: Health check e observabilidade
+- [ ] Fase 9: Testes
+- [ ] Fase 10: Documentação final

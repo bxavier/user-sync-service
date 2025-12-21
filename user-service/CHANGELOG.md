@@ -7,6 +7,26 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+## [0.7.1] - 2025-12-21
+
+### Added
+- Health check endpoints para observabilidade
+  - `GET /health`: Liveness probe simples para load balancers e Kubernetes
+  - `GET /health/details`: Readiness probe com detalhes para Datadog, Zabbix, etc.
+- `HealthService` com verificação de componentes (Database, Redis, API Legada)
+- `HealthController` com documentação Swagger
+- DTOs: `HealthResponseDto`, `HealthDetailsResponseDto`, `ComponentHealthDto`
+- Métricas do sistema: memória, CPU, uptime
+- Estatísticas das filas BullMQ
+- Rate limit restritivo no endpoint `/health/details` (10 req/min)
+
+### Changed
+- Status de saúde com 3 níveis: healthy, degraded, unhealthy
+- HTTP 503 quando componentes críticos (DB, Redis) falham
+- API legada indisponível marca status como `degraded` (não `unhealthy`)
+
+---
+
 ## [0.7.0] - 2025-12-21
 
 ### Added

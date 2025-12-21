@@ -15,6 +15,7 @@ Este documento explica, passo a passo, como cada parte do User Service foi imple
 7. [Fase 6: Exportação CSV](#fase-6-exportação-csv)
 8. [Fase 6.5: Refatoração ConfigModule](#fase-65-refatoração-configmodule)
 9. [Fase 7: Otimizações de Performance](#fase-7-otimizações-de-performance)
+10. [Fase 8: Health Check e Observabilidade](#fase-8-health-check-e-observabilidade)
 
 ---
 
@@ -798,16 +799,109 @@ src/
 
 ---
 
+## Fase 8: Health Check e Observabilidade
+
+**Status**: Concluído
+
+### O que fizemos
+
+Implementamos health checks robustos para observabilidade com ferramentas como Datadog e Zabbix.
+
+**1. Dois endpoints de health check**
+
+| Endpoint | Propósito | Rate Limit |
+|----------|-----------|------------|
+| `GET /health` | Liveness probe (load balancers, Kubernetes) | Global (100 req/min) |
+| `GET /health/details` | Readiness probe (observabilidade) | Restritivo (10 req/min) |
+
+**2. HealthService**
+
+Verifica cada componente com timeout de 3 segundos:
+
+```typescript
+// Verificação do banco de dados
+await this.dataSource.query('SELECT 1');
+
+// Verificação do Redis
+const client = await this.syncQueue.client;
+await client.ping();
+
+// Verificação da API legada
+await axios.head(this.legacyApiUrl, { timeout: 3000 });
+```
+
+**3. Lógica de status**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Status de Saúde                           │
+├─────────────────────────────────────────────────────────────┤
+│ healthy   - Todos os componentes críticos OK                │
+│ degraded  - Componentes não-críticos com problema           │
+│            (ex: API legada indisponível)                    │
+│ unhealthy - Componentes críticos falharam → HTTP 503        │
+│            (Database ou Redis)                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**4. Resposta do `/health/details`**
+
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-12-21T10:30:00.000Z",
+  "version": "1.0.0",
+  "uptime": 86400,
+  "uptimeFormatted": "1d 0h 0m",
+  "components": {
+    "database": { "status": "healthy", "latencyMs": 2 },
+    "redis": { "status": "healthy", "latencyMs": 1 },
+    "legacyApi": { "status": "degraded", "latencyMs": 150 }
+  },
+  "system": {
+    "memoryUsage": { "heapUsed": 52428800, "heapTotal": 67108864 },
+    "cpuUsage": { "user": 1234567, "system": 987654 }
+  },
+  "sync": {
+    "lastSync": { "id": 42, "status": "COMPLETED" },
+    "queueStats": { "waiting": 0, "active": 0, "completed": 1500 }
+  }
+}
+```
+
+**5. Rate limiting**
+
+```typescript
+@Get('details')
+@Throttle({ default: { ttl: 60000, limit: 10 } })
+async checkDetails(): Promise<HealthDetailsResponseDto> {
+  // ...
+}
+```
+
+### Arquivos criados
+
+```
+src/
+├── application/
+│   ├── dtos/
+│   │   └── health-response.dto.ts  # DTOs das respostas
+│   └── services/
+│       └── health.service.ts       # Lógica de verificação
+└── presentation/
+    └── controllers/
+        └── health.controller.ts    # Endpoints REST
+```
+
+---
+
 ## Próximos Passos
 
-Depois da Fase 7, ainda falta:
+Ainda falta:
 
-- **Fase 8**: Qualidade e Observabilidade
-  - Health check endpoint (`GET /health`)
-  - Testes unitários e de integração
+- **Testes**: Unitários e de integração
   - Coverage > 70%
 
-- **Fase 9**: Documentação e Entrega
-  - README.md completo
+- **Documentação final**:
   - docs/AWS_ARCHITECTURE.md
   - Revisão final de código

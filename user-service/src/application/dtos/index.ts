@@ -8,3 +8,15 @@ export {
   TriggerSyncResponseDto,
   ResetSyncResponseDto,
 } from './sync-response.dto';
+export type { HealthStatus } from './health-response.dto';
+export {
+  ComponentHealthDto,
+  HealthResponseDto,
+  HealthDetailsResponseDto,
+  MemoryUsageDto,
+  SystemInfoDto,
+  QueueStatsDto,
+  LastSyncInfoDto,
+  SyncInfoDto,
+  ComponentsHealthDto,
+} from './health-response.dto';

@@ -9,8 +9,8 @@ import { validate, EnvironmentVariables } from './infrastructure/config';
 import { TypeOrmLogger } from './infrastructure/database/typeorm-logger';
 import { User, SyncLog } from './domain/entities';
 import { repositoriesProviders } from './infrastructure/repositories';
-import { UserController, SyncController } from './presentation/controllers';
-import { UserService, SyncService } from './application/services';
+import { UserController, SyncController, HealthController } from './presentation/controllers';
+import { UserService, SyncService, HealthService } from './application/services';
 import {
   SYNC_QUEUE_NAME,
   SYNC_BATCH_QUEUE_NAME,
@@ -71,11 +71,12 @@ import { LegacyApiClient } from './infrastructure/legacy';
       ],
     }),
   ],
-  controllers: [UserController, SyncController],
+  controllers: [UserController, SyncController, HealthController],
   providers: [
     ...repositoriesProviders,
     UserService,
     SyncService,
+    HealthService,
     SyncProcessor,
     SyncBatchProcessor,
     SyncRetryProcessor,
