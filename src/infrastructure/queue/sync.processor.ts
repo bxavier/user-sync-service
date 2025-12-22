@@ -6,16 +6,15 @@ import {
   SYNC_QUEUE_NAME,
   SYNC_BATCH_QUEUE_NAME,
   SYNC_BATCH_JOB_NAME,
-  SYNC_RETRY_QUEUE_NAME,
-  SYNC_RETRY_JOB_NAME,
+  SYNC_JOB_NAME,
+  SYNC_RETRY_DELAY_MS,
 } from './sync.constants';
-import type { SyncRetryJobData } from './sync-retry.processor';
 import { LoggerService } from '../logger';
 import { LegacyApiClient } from '../legacy';
 import type { LegacyUser } from '../legacy';
 import { SYNC_LOG_REPOSITORY } from '../../domain/repositories/sync-log.repository.interface';
 import type { SyncLogRepository } from '../../domain/repositories/sync-log.repository.interface';
-import { SyncStatus } from '../../domain/entities';
+import { SyncLog, SyncStatus } from '../../domain/entities';
 import type { SyncBatchJobData } from './sync-batch.processor';
 
 export interface SyncJobData {
@@ -34,7 +33,6 @@ export interface SyncJobResult {
 export class SyncProcessor extends WorkerHost {
   private readonly logger = new LoggerService(SyncProcessor.name);
   private readonly batchSize: number;
-  private readonly retryDelayMs: number;
 
   constructor(
     private readonly legacyApiClient: LegacyApiClient,
@@ -42,16 +40,12 @@ export class SyncProcessor extends WorkerHost {
     private readonly syncLogRepository: SyncLogRepository,
     @InjectQueue(SYNC_BATCH_QUEUE_NAME)
     private readonly batchQueue: Queue<SyncBatchJobData>,
-    @InjectQueue(SYNC_RETRY_QUEUE_NAME)
-    private readonly retryQueue: Queue<SyncRetryJobData>,
+    @InjectQueue(SYNC_QUEUE_NAME)
+    private readonly syncQueue: Queue<SyncJobData>,
     private readonly configService: ConfigService,
   ) {
     super();
     this.batchSize = this.configService.get<number>('SYNC_BATCH_SIZE', 1000);
-    this.retryDelayMs = this.configService.get<number>(
-      'SYNC_RETRY_DELAY_MS',
-      10 * 60 * 1000,
-    );
   }
 
   async process(job: Job<SyncJobData>): Promise<SyncJobResult> {
@@ -194,7 +188,7 @@ export class SyncProcessor extends WorkerHost {
     reason: string,
   ): Promise<void> {
     // Verifica se já existe retry pendente (evita duplicatas)
-    const delayed = await this.retryQueue.getDelayed();
+    const delayed = await this.syncQueue.getDelayed();
     if (delayed.length > 0) {
       this.logger.log('Retry já agendado, ignorando nova solicitação', {
         syncLogId,
@@ -203,22 +197,36 @@ export class SyncProcessor extends WorkerHost {
       return;
     }
 
-    const jobData: SyncRetryJobData = {
-      reason,
-      originalSyncLogId: syncLogId,
-      scheduledAt: new Date().toISOString(),
-    };
+    // Verifica se já existe sync em andamento
+    const latestSync = await this.syncLogRepository.findLatest();
+    if (SyncLog.isInProgress(latestSync)) {
+      this.logger.log('Retry ignorado: sync já em andamento', {
+        currentSyncLogId: latestSync!.id,
+      });
+      return;
+    }
 
-    await this.retryQueue.add(SYNC_RETRY_JOB_NAME, jobData, {
-      delay: this.retryDelayMs,
-      removeOnComplete: 1,
-      removeOnFail: 1,
+    // Cria novo sync log para o retry
+    const newSyncLog = await this.syncLogRepository.create({
+      status: SyncStatus.PENDING,
     });
 
+    await this.syncQueue.add(
+      SYNC_JOB_NAME,
+      { syncLogId: newSyncLog.id },
+      {
+        delay: SYNC_RETRY_DELAY_MS,
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      },
+    );
+
     this.logger.log('Retry agendado', {
-      syncLogId,
-      delayMs: this.retryDelayMs,
-      delayMinutes: this.retryDelayMs / 60000,
+      originalSyncLogId: syncLogId,
+      newSyncLogId: newSyncLog.id,
+      reason,
+      delayMs: SYNC_RETRY_DELAY_MS,
+      delayMinutes: SYNC_RETRY_DELAY_MS / 60000,
     });
   }
 }

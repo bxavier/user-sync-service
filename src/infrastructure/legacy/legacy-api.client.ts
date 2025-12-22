@@ -32,10 +32,7 @@ export class LegacyApiClient {
       'test-api-key-2024',
     );
 
-    this.circuitBreaker = new CircuitBreaker('legacy-api', {
-      failureThreshold: 5,
-      timeoutMs: 60000,
-    });
+    this.circuitBreaker = new CircuitBreaker('legacy-api');
 
     this.logger.log('LegacyApiClient inicializado', { baseURL: this.baseURL });
   }
@@ -48,7 +45,9 @@ export class LegacyApiClient {
     );
   }
 
-  private async doStreamingFetch(onBatch: BatchCallback): Promise<StreamingResult> {
+  private async doStreamingFetch(
+    onBatch: BatchCallback,
+  ): Promise<StreamingResult> {
     const response = await axios.get(`${this.baseURL}/external/users`, {
       headers: { 'x-api-key': this.apiKey },
       responseType: 'stream',

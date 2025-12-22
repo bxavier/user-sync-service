@@ -148,6 +148,7 @@ const retryConfig = {
 ### Circuit Breaker
 
 ```typescript
+// Default - pode ser customizado por instância
 const circuitBreakerConfig = {
   failureThreshold: 10,
   timeoutMs: 30000,
@@ -158,7 +159,12 @@ const circuitBreakerConfig = {
 
 1. **Timeout automático**: Syncs > 30 min são marcadas como FAILED
 2. **Recovery no startup**: OnModuleInit marca syncs órfãs como FAILED
-3. **Reset manual**: `POST /sync/reset`
+3. **Retry automático**: Job delayed na sync queue reagenda após 10 min de falha
+4. **Reset manual**: `POST /sync/reset`
+
+### Sincronização Agendada
+
+- **Cron**: `@Cron(EVERY_6_HOURS)` executa sincronização automática
 
 ---
 
@@ -174,7 +180,8 @@ const circuitBreakerConfig = {
 | `LEGACY_API_URL`               | **Sim**     | -                        | URL da API legada                 |
 | `LEGACY_API_KEY`               | **Sim**     | -                        | Chave de autenticação             |
 | `SYNC_BATCH_SIZE`              | Não         | `1000`                   | Usuários por batch                |
-| `SYNC_WORKER_CONCURRENCY`      | Não         | `1`                      | Workers paralelos                 |
+| `SYNC_WORKER_CONCURRENCY`      | Não         | `1`                      | Workers paralelos (sync queue)    |
+| `SYNC_BATCH_CONCURRENCY`       | Não         | `5`                      | Workers paralelos (batch queue)   |
 | `SYNC_STALE_THRESHOLD_MINUTES` | Não         | `30`                     | Timeout para sync travada (min)   |
 | `SYNC_ESTIMATED_TOTAL_RECORDS` | Não         | `1000000`                | Estimativa de registros no legado |
 | `TYPEORM_LOGGING`              | Não         | `true`                   | Habilita logs do TypeORM          |
@@ -206,6 +213,8 @@ src/
 │   ├── config/
 │   │   ├── env.validation.ts        # Validação env vars
 │   │   └── swagger.config.ts
+│   ├── database/                    # TypeOrmLogger
+│   ├── logger/                      # CustomLoggerService
 │   ├── repositories/                # Implementações TypeORM
 │   ├── legacy/                      # LegacyApiClient
 │   ├── resilience/                  # Retry, CircuitBreaker

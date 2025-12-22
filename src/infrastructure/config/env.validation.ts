@@ -74,6 +74,12 @@ export class EnvironmentVariables {
   @Min(1)
   @IsOptional()
   @Transform(({ value }) => parseInt(value, 10))
+  SYNC_BATCH_CONCURRENCY: number = 5;
+
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value, 10))
   SYNC_STALE_THRESHOLD_MINUTES: number = 30;
 
   @IsInt()

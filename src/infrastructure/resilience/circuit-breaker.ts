@@ -16,7 +16,10 @@ export class CircuitBreaker {
   ) {}
 
   async execute<T>(fn: () => Promise<T>): Promise<T> {
-    if (this.isOpen && Date.now() - this.lastFailureTime < this.config.timeoutMs) {
+    if (
+      this.isOpen &&
+      Date.now() - this.lastFailureTime < this.config.timeoutMs
+    ) {
       throw new CircuitBreakerError();
     }
 
