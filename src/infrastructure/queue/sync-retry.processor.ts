@@ -1,9 +1,12 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Inject, forwardRef } from '@nestjs/common';
-import { Job } from 'bullmq';
-import { SYNC_RETRY_QUEUE_NAME } from './sync.constants';
+import { Processor, WorkerHost, InjectQueue } from '@nestjs/bullmq';
+import { Job, Queue } from 'bullmq';
+import { SYNC_RETRY_QUEUE_NAME, SYNC_QUEUE_NAME, SYNC_JOB_NAME } from './sync.constants';
+import type { SyncJobData } from './sync.processor';
 import { LoggerService } from '../logger';
-import { SyncService } from '../../application/services';
+import { Inject } from '@nestjs/common';
+import { SYNC_LOG_REPOSITORY } from '../../domain/repositories/sync-log.repository.interface';
+import type { SyncLogRepository } from '../../domain/repositories/sync-log.repository.interface';
+import { SyncStatus } from '../../domain/entities';
 
 export interface SyncRetryJobData {
   reason: string;
@@ -16,8 +19,10 @@ export class SyncRetryProcessor extends WorkerHost {
   private readonly logger = new LoggerService(SyncRetryProcessor.name);
 
   constructor(
-    @Inject(forwardRef(() => SyncService))
-    private readonly syncService: SyncService,
+    @InjectQueue(SYNC_QUEUE_NAME)
+    private readonly syncQueue: Queue<SyncJobData>,
+    @Inject(SYNC_LOG_REPOSITORY)
+    private readonly syncLogRepository: SyncLogRepository,
   ) {
     super();
   }
@@ -32,17 +37,38 @@ export class SyncRetryProcessor extends WorkerHost {
     });
 
     try {
-      const result = await this.syncService.triggerSync();
+      // Verifica se já existe sync em andamento
+      const latestSync = await this.syncLogRepository.findLatest();
 
-      if (result.alreadyRunning) {
+      if (
+        latestSync &&
+        (latestSync.status === SyncStatus.PENDING ||
+          latestSync.status === SyncStatus.RUNNING ||
+          latestSync.status === SyncStatus.PROCESSING)
+      ) {
         this.logger.log('Retry ignorado: sync já em andamento', {
-          currentSyncLogId: result.syncLogId,
+          currentSyncLogId: latestSync.id,
         });
         return;
       }
 
+      // Cria novo sync log
+      const syncLog = await this.syncLogRepository.create({
+        status: SyncStatus.PENDING,
+      });
+
+      // Enfileira job de sync diretamente
+      await this.syncQueue.add(
+        SYNC_JOB_NAME,
+        { syncLogId: syncLog.id },
+        {
+          removeOnComplete: 100,
+          removeOnFail: 50,
+        },
+      );
+
       this.logger.log('Retry disparou nova sync com sucesso', {
-        newSyncLogId: result.syncLogId,
+        newSyncLogId: syncLog.id,
         originalSyncLogId,
       });
     } catch (error) {

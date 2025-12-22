@@ -20,10 +20,11 @@ export class HealthController {
 
   @Get()
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 30 } })
   @ApiOperation({
     summary: 'Liveness check',
     description:
-      'Verifica se a aplicação está viva. Usado por load balancers e Kubernetes liveness probes.',
+      'Verifica se a aplicação está viva. Usado por load balancers e Kubernetes liveness probes. Rate limit: 30 req/min.',
   })
   @ApiOkResponse({
     description: 'Aplicação está saudável ou degradada',

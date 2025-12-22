@@ -1,4 +1,4 @@
-# Arquitetura AWS - User Service
+# Arquitetura AWS - User Sync Service
 
 ## Contexto
 

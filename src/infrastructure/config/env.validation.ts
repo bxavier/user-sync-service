@@ -58,22 +58,6 @@ export class EnvironmentVariables {
   LEGACY_API_KEY: string;
 
   // Sync Configuration
-  @IsString()
-  @IsOptional()
-  SYNC_CRON_EXPRESSION: string = '0 */6 * * *';
-
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  @Transform(({ value }) => parseInt(value, 10))
-  SYNC_RETRY_ATTEMPTS: number = 3;
-
-  @IsInt()
-  @Min(100)
-  @IsOptional()
-  @Transform(({ value }) => parseInt(value, 10))
-  SYNC_RETRY_DELAY: number = 1000;
-
   @IsInt()
   @Min(100)
   @IsOptional()
@@ -85,6 +69,18 @@ export class EnvironmentVariables {
   @IsOptional()
   @Transform(({ value }) => parseInt(value, 10))
   SYNC_WORKER_CONCURRENCY: number = 1;
+
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value, 10))
+  SYNC_STALE_THRESHOLD_MINUTES: number = 30;
+
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value, 10))
+  SYNC_ESTIMATED_TOTAL_RECORDS: number = 1_000_000;
 
   // Rate Limiting
   @IsInt()

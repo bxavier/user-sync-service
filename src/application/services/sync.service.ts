@@ -11,12 +11,6 @@ import type { SyncLogRepository } from '../../domain/repositories/sync-log.repos
 import { SyncLog, SyncStatus } from '../../domain/entities';
 import type { SyncStatusDto } from '../dtos';
 
-/** Timeout em minutos para considerar uma sync como travada */
-const STALE_SYNC_THRESHOLD_MINUTES = 30;
-
-/** Estimativa de total de registros no sistema legado */
-const ESTIMATED_TOTAL_RECORDS = 1_000_000;
-
 export interface TriggerSyncResult {
   syncLogId: number;
   message: string;
@@ -34,6 +28,8 @@ export class SyncService implements OnModuleInit {
   private readonly logger = new LoggerService(SyncService.name);
   private readonly batchSize: number;
   private readonly workerConcurrency: number;
+  private readonly staleSyncThresholdMinutes: number;
+  private readonly estimatedTotalRecords: number;
 
   constructor(
     @InjectQueue(SYNC_QUEUE_NAME)
@@ -46,6 +42,14 @@ export class SyncService implements OnModuleInit {
     this.workerConcurrency = this.configService.get<number>(
       'SYNC_WORKER_CONCURRENCY',
       1,
+    );
+    this.staleSyncThresholdMinutes = this.configService.get<number>(
+      'SYNC_STALE_THRESHOLD_MINUTES',
+      30,
+    );
+    this.estimatedTotalRecords = this.configService.get<number>(
+      'SYNC_ESTIMATED_TOTAL_RECORDS',
+      1_000_000,
     );
   }
 
@@ -69,14 +73,14 @@ export class SyncService implements OnModuleInit {
   async triggerSync(): Promise<TriggerSyncResult> {
     // Primeiro, verifica e marca syncs travadas como FAILED (timeout automático)
     const staleCount = await this.syncLogRepository.markStaleAsFailed(
-      STALE_SYNC_THRESHOLD_MINUTES,
-      `Sync travada: timeout após ${STALE_SYNC_THRESHOLD_MINUTES} minutos`,
+      this.staleSyncThresholdMinutes,
+      `Sync travada: timeout após ${this.staleSyncThresholdMinutes} minutos`,
     );
 
     if (staleCount > 0) {
       this.logger.warn('Syncs travadas marcadas como FAILED', {
         count: staleCount,
-        thresholdMinutes: STALE_SYNC_THRESHOLD_MINUTES,
+        thresholdMinutes: this.staleSyncThresholdMinutes,
       });
     }
 
@@ -147,7 +151,7 @@ export class SyncService implements OnModuleInit {
         ? 100
         : Math.min(
             Math.round(
-              (syncLog.totalProcessed / ESTIMATED_TOTAL_RECORDS) * 1000,
+              (syncLog.totalProcessed / this.estimatedTotalRecords) * 1000,
             ) / 10,
             99.9,
           );
@@ -159,7 +163,7 @@ export class SyncService implements OnModuleInit {
       syncLog.status !== SyncStatus.COMPLETED &&
       syncLog.status !== SyncStatus.FAILED
     ) {
-      const remaining = ESTIMATED_TOTAL_RECORDS - syncLog.totalProcessed;
+      const remaining = this.estimatedTotalRecords - syncLog.totalProcessed;
       const secondsRemaining = remaining / recordsPerSecond;
       estimatedTimeRemaining = this.formatDuration(secondsRemaining * 1000);
     }
@@ -196,7 +200,7 @@ export class SyncService implements OnModuleInit {
     return this.syncLogRepository.findAll(limit);
   }
 
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  @Cron(CronExpression.EVERY_6_HOURS) // A cada 6 horas
   async handleScheduledSync(): Promise<void> {
     this.logger.log('Executando sincronização agendada');
     await this.triggerSync();

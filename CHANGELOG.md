@@ -7,6 +7,40 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+## [0.7.4] - 2025-12-21
+
+### Changed
+- Cron de sync agendada alterado para `EVERY_6_HOURS` (era `EVERY_5_MINUTES`)
+- Rate limit adicionado ao endpoint `/health` (30 req/min)
+- `SyncRetryProcessor` refatorado para usar Queue diretamente (remove dependência circular)
+- Variáveis `SYNC_STALE_THRESHOLD_MINUTES` e `SYNC_ESTIMATED_TOTAL_RECORDS` agora configuráveis
+
+### Removed
+- Env vars não utilizadas: `SYNC_CRON_EXPRESSION`, `SYNC_RETRY_ATTEMPTS`, `SYNC_RETRY_DELAY`
+- Constante `BATCH_SIZE` de `sync.constants.ts` (não utilizada)
+- Método `exportUsers()` de `user.service.ts` (não utilizado)
+- Métodos `plain()`, `setLogLevels()`, `disableColors()`, `enableColors()` do `CustomLoggerService`
+
+### Added
+- `CLAUDE.md` com documentação do projeto para desenvolvimento assistido por IA
+
+---
+
+## [0.7.3] - 2025-12-21
+
+### Changed
+- README.md reescrito com documentação completa e detalhada
+  - Stack tecnológica com justificativas
+  - 3 opções de execução (Docker Compose, local, produção)
+  - Tabela completa de variáveis de ambiente
+  - Arquitetura do projeto com estrutura de pastas
+  - Padrões de resiliência implementados
+  - Métricas de performance
+  - Checklist do teste técnico
+  - Exemplos de uso com curl
+
+---
+
 ## [0.7.2] - 2025-12-21
 
 ### Changed
@@ -112,7 +146,6 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - Configuração Swagger separada
 - LoggerService customizado (estende ConsoleLogger do NestJS)
 - TypeORM logger integrado ao formato NestJS
-- Documentação do projeto (.ai/)
 
 ### Fase 2: Domínio e Persistência
 - Entidade `User` com soft delete (campo `deleted` + `deletedAt`)

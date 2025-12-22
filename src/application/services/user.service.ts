@@ -15,7 +15,6 @@ import {
   ExportCsvQueryDto,
 } from '../dtos';
 import { LoggerService } from '../../infrastructure/logger';
-import { User } from '../../domain/entities';
 
 @Injectable()
 export class UserService {
@@ -125,20 +124,6 @@ export class UserService {
     }
 
     this.logger.log('Usuário removido com sucesso', { id });
-  }
-
-  async *exportUsers(
-    query: ExportCsvQueryDto,
-  ): AsyncGenerator<User, void, unknown> {
-    this.logger.log('Exportando usuários para CSV', {
-      createdFrom: query.created_from,
-      createdTo: query.created_to,
-    });
-
-    yield* this.userRepository.findAllForExport({
-      createdFrom: query.created_from,
-      createdTo: query.created_to,
-    });
   }
 
   async *exportUsersCsv(

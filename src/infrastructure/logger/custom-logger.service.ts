@@ -1,4 +1,4 @@
-import { ConsoleLogger, Injectable, LogLevel } from '@nestjs/common';
+import { ConsoleLogger, Injectable } from '@nestjs/common';
 
 export interface LogMetadata {
   [key: string]: any;
@@ -125,45 +125,5 @@ export class LoggerService extends ConsoleLogger {
     }
 
     return '';
-  }
-
-  setLogLevels(levels: LogLevel[]) {
-    super.setLogLevels(levels);
-  }
-
-  /**
-   * Logs plain white text without color formatting
-   */
-  plain(message: string, metadata?: LogMetadata) {
-    const methodName = this.getCallerMethodName();
-    const parts: string[] = [];
-
-    if (methodName) {
-      parts.push(`[${methodName}]`);
-    }
-
-    parts.push(message);
-
-    if (metadata && Object.keys(metadata).length > 0) {
-      parts.push(JSON.stringify(metadata));
-    }
-
-    // Use console.log directly for plain white text
-    console.log(parts.join(' '));
-  }
-
-  /**
-   * Disable colors for all log levels (outputs plain white text)
-   */
-  disableColors() {
-    // This will make all logs output as plain text
-    (this as any).options = { ...((this as any).options || {}), colors: false };
-  }
-
-  /**
-   * Enable colors for all log levels (default behavior)
-   */
-  enableColors() {
-    (this as any).options = { ...((this as any).options || {}), colors: true };
   }
 }

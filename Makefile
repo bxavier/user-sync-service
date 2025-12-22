@@ -23,7 +23,7 @@ restart: ## Restart api container
 
 ## Build & Clean
 build: ## Build production image
-	docker build -t user-service -f $(DOCKER_DIR)/Dockerfile .
+	docker build -t user-sync-service -f $(DOCKER_DIR)/Dockerfile .
 
 clean: ## Remove containers, volumes and images
 	docker-compose -f $(DEV_COMPOSE) down -v --rmi local 2>/dev/null || true

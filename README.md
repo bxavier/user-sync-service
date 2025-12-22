@@ -1,4 +1,4 @@
-# User Service - Teste Técnico
+# User Sync Service - Teste Técnico
 
 Serviço de integração que sincroniza dados de um sistema legado instável, mantém base própria e disponibiliza endpoints REST.
 
@@ -38,7 +38,7 @@ A aplicação é **facilmente deployável em AWS** utilizando serviços gerencia
 Sobe todos os serviços (API, Redis e Legacy API) com um comando:
 
 ```bash
-cd user-service
+cd user-sync-service
 
 # Usando Make
 make dev
@@ -50,7 +50,7 @@ docker-compose -f docker/docker-compose.dev.yml up --build
 ### Opção 2: Desenvolvimento Local
 
 ```bash
-cd user-service
+cd user-sync-service
 
 # 1. Suba o Redis
 docker run -d --name redis-local -p 6379:6379 redis:7-alpine
@@ -62,7 +62,7 @@ docker build -t api-legada .
 docker run -m 128m --network=host api-legada
 
 # 3. Instale dependências e rode o serviço
-cd ../../user-service
+cd ../../user-sync-service
 npm install
 cp .env.example .env
 npm run start:dev
@@ -71,17 +71,17 @@ npm run start:dev
 ### Opção 3: Build de Produção
 
 ```bash
-cd user-service
+cd user-sync-service
 
 # Build da imagem
-docker build -t user-service -f docker/Dockerfile .
+docker build -t user-sync-service -f docker/Dockerfile .
 
 # Executar (requer Redis e Legacy API rodando)
 docker run -m 128m -p 3000:3000 \
   -e REDIS_HOST=host.docker.internal \
   -e LEGACY_API_URL=http://host.docker.internal:3001 \
   -e LEGACY_API_KEY=test-api-key-2024 \
-  user-service
+  user-sync-service
 ```
 
 ---
@@ -141,12 +141,10 @@ docker run -m 128m -p 3000:3000 \
 | `REDIS_PORT` | **Sim** | - | Porta do Redis |
 | `LEGACY_API_URL` | **Sim** | - | URL da API legada |
 | `LEGACY_API_KEY` | **Sim** | - | Chave de autenticação |
-| `SYNC_CRON_EXPRESSION` | Não | `0 */6 * * *` | Cron da sync (a cada 6h) |
-| `SYNC_RETRY_ATTEMPTS` | Não | `3` | Tentativas de retry HTTP |
-| `SYNC_RETRY_DELAY` | Não | `1000` | Delay inicial do retry (ms) |
-| `SYNC_BATCH_SIZE` | Não | `1000` | Usuários por batch |
+| `SYNC_BATCH_SIZE` | Não | `2000` | Usuários por batch |
 | `SYNC_WORKER_CONCURRENCY` | Não | `1` | Workers paralelos |
-| `SYNC_RETRY_DELAY_MS` | Não | `600000` | Delay para retry de sync falha (10 min) |
+| `SYNC_STALE_THRESHOLD_MINUTES` | Não | `30` | Timeout para sync travada (min) |
+| `SYNC_ESTIMATED_TOTAL_RECORDS` | Não | `1000000` | Estimativa de registros no legado |
 | `RATE_LIMIT_TTL` | Não | `60` | Janela de rate limit (segundos) |
 | `RATE_LIMIT_MAX` | Não | `100` | Máximo de requests por janela |
 
@@ -286,7 +284,6 @@ curl http://localhost:3000/health/details
 
 | Documento | Descrição |
 |-----------|-----------|
-| [docs/TECHNICAL_IMPLEMENTATION.md](docs/TECHNICAL_IMPLEMENTATION.md) | Detalhes de implementação fase a fase |
 | [docs/AWS_ARCHITECTURE.md](docs/AWS_ARCHITECTURE.md) | Arquitetura proposta para deploy AWS |
 | [CHANGELOG.md](CHANGELOG.md) | Histórico de mudanças |
 

@@ -3,7 +3,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 export function setupSwagger(app: INestApplication): void {
   const config = new DocumentBuilder()
-    .setTitle('User Service API')
+    .setTitle('User Sync Service API')
     .setDescription(
       'API for user management and legacy system synchronization',
     )
