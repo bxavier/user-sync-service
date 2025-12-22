@@ -13,10 +13,23 @@ export enum SyncStatus {
   FAILED = 'failed',
 }
 
+const IN_PROGRESS_STATUSES = [
+  SyncStatus.PENDING,
+  SyncStatus.RUNNING,
+  SyncStatus.PROCESSING,
+];
+
 @Entity('sync_logs')
 export class SyncLog {
   @PrimaryGeneratedColumn()
   id: number;
+
+  /**
+   * Verifica se uma sync está em andamento (PENDING, RUNNING ou PROCESSING)
+   */
+  static isInProgress(sync: SyncLog | null): boolean {
+    return sync !== null && IN_PROGRESS_STATUSES.includes(sync.status);
+  }
 
   @Column({ type: 'varchar', length: 20, default: SyncStatus.PENDING })
   status: SyncStatus;

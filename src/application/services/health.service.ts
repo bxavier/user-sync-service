@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -14,6 +14,8 @@ import {
 } from '../dtos/health-response.dto';
 import { SYNC_QUEUE_NAME, SYNC_BATCH_QUEUE_NAME } from '../../infrastructure/queue';
 import type { SyncJobData, SyncBatchJobData } from '../../infrastructure/queue';
+import { SYNC_LOG_REPOSITORY } from '../../domain/repositories/sync-log.repository.interface';
+import type { SyncLogRepository } from '../../domain/repositories/sync-log.repository.interface';
 
 const COMPONENT_TIMEOUT_MS = 3000;
 const APP_VERSION = '1.0.0';
@@ -30,6 +32,8 @@ export class HealthService {
     private readonly syncQueue: Queue<SyncJobData>,
     @InjectQueue(SYNC_BATCH_QUEUE_NAME)
     private readonly batchQueue: Queue<SyncBatchJobData>,
+    @Inject(SYNC_LOG_REPOSITORY)
+    private readonly syncLogRepository: SyncLogRepository,
   ) {
     this.startTime = Date.now();
     this.legacyApiUrl = this.configService.get<string>(
@@ -215,25 +219,19 @@ export class HealthService {
 
   private async getLastSync(): Promise<LastSyncInfoDto | null> {
     try {
-      const result = await this.dataSource.query(`
-        SELECT id, status, total_processed, duration_ms, started_at, finished_at
-        FROM sync_log
-        ORDER BY id DESC
-        LIMIT 1
-      `);
+      const syncLog = await this.syncLogRepository.findLatest();
 
-      if (!result || result.length === 0) {
+      if (!syncLog) {
         return null;
       }
 
-      const row = result[0];
       return {
-        id: row.id,
-        status: row.status,
-        totalProcessed: row.total_processed,
-        durationMs: row.duration_ms,
-        startedAt: new Date(row.started_at),
-        finishedAt: row.finished_at ? new Date(row.finished_at) : undefined,
+        id: syncLog.id,
+        status: syncLog.status,
+        totalProcessed: syncLog.totalProcessed,
+        durationMs: syncLog.durationMs ?? undefined,
+        startedAt: syncLog.startedAt,
+        finishedAt: syncLog.finishedAt ?? undefined,
       };
     } catch {
       return null;

@@ -6,7 +6,7 @@ import { LoggerService } from '../logger';
 import { Inject } from '@nestjs/common';
 import { SYNC_LOG_REPOSITORY } from '../../domain/repositories/sync-log.repository.interface';
 import type { SyncLogRepository } from '../../domain/repositories/sync-log.repository.interface';
-import { SyncStatus } from '../../domain/entities';
+import { SyncLog, SyncStatus } from '../../domain/entities';
 
 export interface SyncRetryJobData {
   reason: string;
@@ -40,14 +40,9 @@ export class SyncRetryProcessor extends WorkerHost {
       // Verifica se já existe sync em andamento
       const latestSync = await this.syncLogRepository.findLatest();
 
-      if (
-        latestSync &&
-        (latestSync.status === SyncStatus.PENDING ||
-          latestSync.status === SyncStatus.RUNNING ||
-          latestSync.status === SyncStatus.PROCESSING)
-      ) {
+      if (SyncLog.isInProgress(latestSync)) {
         this.logger.log('Retry ignorado: sync já em andamento', {
-          currentSyncLogId: latestSync.id,
+          currentSyncLogId: latestSync!.id,
         });
         return;
       }

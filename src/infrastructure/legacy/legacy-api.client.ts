@@ -88,22 +88,8 @@ export class LegacyApiClient {
 
         // Processa todos os arrays encontrados
         if (result.arrays.length > 0) {
-          const allUsers: LegacyUser[] = [];
-
-          for (const jsonStr of result.arrays) {
-            try {
-              const parsed = JSON.parse(jsonStr) as unknown[];
-              for (const item of parsed) {
-                if (this.isValidUser(item)) {
-                  allUsers.push(item as LegacyUser);
-                } else {
-                  totalErrors++;
-                }
-              }
-            } catch {
-              totalErrors++;
-            }
-          }
+          const { users: allUsers, errors } = this.parseArraysToUsers(result.arrays);
+          totalErrors += errors;
 
           if (allUsers.length > 0) {
             totalProcessed += allUsers.length;
@@ -130,22 +116,8 @@ export class LegacyApiClient {
         // Processa dados restantes no buffer
         if (buffer.trim()) {
           const result = this.extractArrays(buffer);
-          const allUsers: LegacyUser[] = [];
-
-          for (const jsonStr of result.arrays) {
-            try {
-              const parsed = JSON.parse(jsonStr) as unknown[];
-              for (const item of parsed) {
-                if (this.isValidUser(item)) {
-                  allUsers.push(item as LegacyUser);
-                } else {
-                  totalErrors++;
-                }
-              }
-            } catch {
-              totalErrors++;
-            }
-          }
+          const { users: allUsers, errors } = this.parseArraysToUsers(result.arrays);
+          totalErrors += errors;
 
           if (allUsers.length > 0) {
             totalProcessed += allUsers.length;
@@ -210,6 +182,31 @@ export class LegacyApiClient {
       arrays,
       remaining: start !== -1 ? data.substring(start) : data.substring(lastEnd),
     };
+  }
+
+  private parseArraysToUsers(arrays: string[]): {
+    users: LegacyUser[];
+    errors: number;
+  } {
+    const users: LegacyUser[] = [];
+    let errors = 0;
+
+    for (const jsonStr of arrays) {
+      try {
+        const parsed = JSON.parse(jsonStr) as unknown[];
+        for (const item of parsed) {
+          if (this.isValidUser(item)) {
+            users.push(item as LegacyUser);
+          } else {
+            errors++;
+          }
+        }
+      } catch {
+        errors++;
+      }
+    }
+
+    return { users, errors };
   }
 
   private isValidUser(obj: unknown): boolean {

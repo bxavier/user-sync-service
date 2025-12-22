@@ -86,19 +86,14 @@ export class SyncService implements OnModuleInit {
 
     const latestSync = await this.syncLogRepository.findLatest();
 
-    if (
-      latestSync &&
-      (latestSync.status === SyncStatus.PENDING ||
-        latestSync.status === SyncStatus.RUNNING ||
-        latestSync.status === SyncStatus.PROCESSING)
-    ) {
+    if (SyncLog.isInProgress(latestSync)) {
       this.logger.log('Sincronização já em andamento', {
-        syncLogId: latestSync.id,
-        status: latestSync.status,
+        syncLogId: latestSync!.id,
+        status: latestSync!.status,
       });
 
       return {
-        syncLogId: latestSync.id,
+        syncLogId: latestSync!.id,
         message: 'Sincronização já em andamento',
         alreadyRunning: true,
       };
@@ -217,11 +212,7 @@ export class SyncService implements OnModuleInit {
     }
 
     // Só permite reset de syncs em andamento
-    if (
-      latestSync.status !== SyncStatus.PENDING &&
-      latestSync.status !== SyncStatus.RUNNING &&
-      latestSync.status !== SyncStatus.PROCESSING
-    ) {
+    if (!SyncLog.isInProgress(latestSync)) {
       return null;
     }
 
