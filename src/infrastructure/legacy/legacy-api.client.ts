@@ -44,16 +44,7 @@ export class LegacyApiClient {
     this.logger.log('Iniciando streaming de usuários da API legada');
 
     return this.circuitBreaker.execute(() =>
-      withRetry(
-        async () => this.doStreamingFetch(onBatch),
-        {
-          maxAttempts: 10,
-          initialDelayMs: 100,
-          maxDelayMs: 500,
-          backoffMultiplier: 1.5,
-        },
-        this.logger,
-      ),
+      withRetry(() => this.doStreamingFetch(onBatch), {}, this.logger),
     );
   }
 
@@ -68,78 +59,37 @@ export class LegacyApiClient {
     let buffer = '';
     let totalProcessed = 0;
     let totalErrors = 0;
-    const pendingBatches: Promise<void>[] = [];
 
-    return new Promise((resolve, reject) => {
-      let lastChunkTime = Date.now();
-      let chunkCount = 0;
+    for await (const chunk of stream) {
+      buffer += chunk.toString();
 
-      stream.on('data', (chunk: Buffer) => {
-        const now = Date.now();
-        const timeSinceLastChunk = now - lastChunkTime;
-        lastChunkTime = now;
-        chunkCount++;
+      const result = this.extractArrays(buffer);
+      buffer = result.remaining;
 
-        buffer += chunk.toString();
+      for (const jsonStr of result.arrays) {
+        const { users, errors } = this.parseArraysToUsers([jsonStr]);
+        totalErrors += errors;
 
-        // Extrai arrays JSON completos do buffer
-        const result = this.extractArrays(buffer);
-        buffer = result.remaining;
-
-        // Processa todos os arrays encontrados
-        if (result.arrays.length > 0) {
-          const { users: allUsers, errors } = this.parseArraysToUsers(result.arrays);
-          totalErrors += errors;
-
-          if (allUsers.length > 0) {
-            totalProcessed += allUsers.length;
-
-            // Log de timing a cada 1000 registros
-            if (totalProcessed % 1000 < allUsers.length) {
-              this.logger.log('Timing chunk', {
-                timeSinceLastChunk,
-                chunkCount,
-                arraysInChunk: result.arrays.length,
-                usersInChunk: allUsers.length,
-                totalProcessed,
-                totalErrors,
-              });
-            }
-
-            // Enfileira sem aguardar - não bloqueia o stream
-            pendingBatches.push(onBatch(allUsers));
-          }
+        if (users.length > 0) {
+          totalProcessed += users.length;
+          await onBatch(users);
         }
-      });
+      }
+    }
 
-      stream.on('end', async () => {
-        // Processa dados restantes no buffer
-        if (buffer.trim()) {
-          const result = this.extractArrays(buffer);
-          const { users: allUsers, errors } = this.parseArraysToUsers(result.arrays);
-          totalErrors += errors;
+    // Buffer residual
+    if (buffer.trim()) {
+      const result = this.extractArrays(buffer);
+      const { users, errors } = this.parseArraysToUsers(result.arrays);
+      totalErrors += errors;
+      if (users.length > 0) {
+        totalProcessed += users.length;
+        await onBatch(users);
+      }
+    }
 
-          if (allUsers.length > 0) {
-            totalProcessed += allUsers.length;
-            pendingBatches.push(onBatch(allUsers));
-          }
-        }
-
-        // Aguarda todos os batches pendentes terminarem
-        try {
-          await Promise.all(pendingBatches);
-          this.logger.log('Streaming concluído', { totalProcessed, totalErrors });
-          resolve({ totalProcessed, totalErrors });
-        } catch (error) {
-          reject(error);
-        }
-      });
-
-      stream.on('error', (error) => {
-        this.logger.error('Erro no streaming', { error: error.message });
-        reject(error);
-      });
-    });
+    this.logger.log('Streaming concluído', { totalProcessed, totalErrors });
+    return { totalProcessed, totalErrors };
   }
 
   /**

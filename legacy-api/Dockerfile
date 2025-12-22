@@ -8,10 +8,8 @@ RUN npm install
 
 RUN npm run build
 
-# Descompacta o banco de dados se ainda não existir
-RUN if [ ! -f dist/infrastructure/users.db ] && [ -f dist/infrastructure/users.db.gz ]; then \
-      gunzip -k dist/infrastructure/users.db.gz; \
-    fi
+# Descompacta o banco de dados do src para o dist
+RUN gunzip -c src/infrastructure/users.db.gz > dist/infrastructure/users.db
 
 EXPOSE 3001
 

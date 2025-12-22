@@ -11,12 +11,9 @@ import {
   UpsertUserData,
   ExportFilters,
 } from '../../domain/repositories/user.repository.interface';
-import { LoggerService } from '../logger';
 
 @Injectable()
 export class UserRepositoryImpl implements UserRepository {
-  private readonly logger = new LoggerService(UserRepositoryImpl.name);
-
   constructor(
     @InjectRepository(User)
     private readonly repository: Repository<User>,
@@ -125,27 +122,13 @@ export class UserRepositoryImpl implements UserRepository {
   }
 
   async bulkUpsertByUserName(data: UpsertUserData[]): Promise<number> {
-    if (data.length === 0) {
-      return 0;
-    }
+    if (data.length === 0) return 0;
 
-    // SQLite SQLITE_MAX_VARIABLE_NUMBER default = 999, com 6 campos = 166 max
-    const CHUNK_SIZE = 166;
-    const startTime = Date.now();
-    let totalChunks = 0;
+    // SQLite SQLITE_MAX_VARIABLE_NUMBER default = 999, com 8 campos = 124 max
+    const CHUNK_SIZE = 124;
 
     for (let i = 0; i < data.length; i += CHUNK_SIZE) {
-      const chunk = data.slice(i, i + CHUNK_SIZE);
-      await this.upsertChunk(chunk);
-      totalChunks++;
-    }
-
-    const totalMs = Date.now() - startTime;
-    if (totalMs > 100) {
-      // Log apenas se demorar mais de 100ms
-      this.logger.debug(
-        `bulkUpsert: ${data.length} registros em ${totalChunks} chunks, ${totalMs}ms (${Math.round(data.length / (totalMs / 1000))} reg/s)`,
-      );
+      await this.upsertChunk(data.slice(i, i + CHUNK_SIZE));
     }
 
     return data.length;

@@ -33,7 +33,7 @@ Serviço de integração que sincroniza dados de um sistema legado instável (~1
 │  Legacy API     │◀───streaming───────────────│ LegacyApiClient │
 │  (Port 3001)    │                            │ (axios stream)  │
 └─────────────────┘                            └────────┬────────┘
-                                                        │ batch (2000 users)
+                                                        │ batch (1000 users)
                                                         ▼
                                                ┌─────────────────┐
                                                │ Batch Queue     │
@@ -149,9 +149,8 @@ const retryConfig = {
 
 ```typescript
 const circuitBreakerConfig = {
-  failureThreshold: 5,
-  successThreshold: 2,
-  timeout: 30000,
+  failureThreshold: 10,
+  timeoutMs: 30000,
 };
 ```
 
@@ -165,22 +164,22 @@ const circuitBreakerConfig = {
 
 ## Variáveis de Ambiente
 
-| Variável                       | Obrigatório | Default                  | Descrição                          |
-| ------------------------------ | ----------- | ------------------------ | ---------------------------------- |
-| `NODE_ENV`                     | Não         | `development`            | Ambiente (dev/prod/test)           |
-| `PORT`                         | Não         | `3000`                   | Porta da aplicação                 |
-| `DATABASE_PATH`                | Não         | `./data/database.sqlite` | Caminho do SQLite                  |
-| `REDIS_HOST`                   | **Sim**     | -                        | Host do Redis                      |
-| `REDIS_PORT`                   | **Sim**     | -                        | Porta do Redis                     |
-| `LEGACY_API_URL`               | **Sim**     | -                        | URL da API legada                  |
-| `LEGACY_API_KEY`               | **Sim**     | -                        | Chave de autenticação              |
-| `SYNC_BATCH_SIZE`              | Não         | `2000`                   | Usuários por batch                 |
-| `SYNC_WORKER_CONCURRENCY`      | Não         | `1`                      | Workers paralelos                  |
-| `SYNC_STALE_THRESHOLD_MINUTES` | Não         | `30`                     | Timeout para sync travada (min)    |
-| `SYNC_ESTIMATED_TOTAL_RECORDS` | Não         | `1000000`                | Estimativa de registros no legado  |
-| `TYPEORM_LOGGING`              | Não         | `true`                   | Habilita logs do TypeORM           |
-| `RATE_LIMIT_TTL`               | Não         | `60`                     | TTL do rate limit (segundos)       |
-| `RATE_LIMIT_MAX`               | Não         | `100`                    | Máximo de requests por TTL         |
+| Variável                       | Obrigatório | Default                  | Descrição                         |
+| ------------------------------ | ----------- | ------------------------ | --------------------------------- |
+| `NODE_ENV`                     | Não         | `development`            | Ambiente (dev/prod/test)          |
+| `PORT`                         | Não         | `3000`                   | Porta da aplicação                |
+| `DATABASE_PATH`                | Não         | `./data/database.sqlite` | Caminho do SQLite                 |
+| `REDIS_HOST`                   | **Sim**     | -                        | Host do Redis                     |
+| `REDIS_PORT`                   | **Sim**     | -                        | Porta do Redis                    |
+| `LEGACY_API_URL`               | **Sim**     | -                        | URL da API legada                 |
+| `LEGACY_API_KEY`               | **Sim**     | -                        | Chave de autenticação             |
+| `SYNC_BATCH_SIZE`              | Não         | `1000`                   | Usuários por batch                |
+| `SYNC_WORKER_CONCURRENCY`      | Não         | `1`                      | Workers paralelos                 |
+| `SYNC_STALE_THRESHOLD_MINUTES` | Não         | `30`                     | Timeout para sync travada (min)   |
+| `SYNC_ESTIMATED_TOTAL_RECORDS` | Não         | `1000000`                | Estimativa de registros no legado |
+| `TYPEORM_LOGGING`              | Não         | `true`                   | Habilita logs do TypeORM          |
+| `RATE_LIMIT_TTL`               | Não         | `60`                     | TTL do rate limit (segundos)      |
+| `RATE_LIMIT_MAX`               | Não         | `100`                    | Máximo de requests por TTL        |
 
 ---
 
@@ -269,7 +268,6 @@ export class CreateUserDto {
 
 - Testes unitários e de integração
 - `docs/OPTIMIZATIONS.md`
-- `README.md` completo
 
 ---
 

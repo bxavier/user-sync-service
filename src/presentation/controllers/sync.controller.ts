@@ -45,11 +45,17 @@ export class SyncController {
     type: SyncStatusDto,
   })
   @ApiResponse({
-    status: HttpStatus.OK,
+    status: HttpStatus.NOT_FOUND,
     description: 'Nenhuma sincronização encontrada',
   })
-  async getStatus(): Promise<SyncStatusDto | null> {
-    return this.syncService.getLatestSyncStatus();
+  async getStatus(): Promise<SyncStatusDto> {
+    const status = await this.syncService.getLatestSyncStatus();
+
+    if (!status) {
+      throw new NotFoundException('Nenhuma sincronização encontrada');
+    }
+
+    return status;
   }
 
   @Get('history')

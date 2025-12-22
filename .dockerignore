@@ -4,3 +4,6 @@ data
 .env
 .git
 *.md
+
+# Legacy API (separate build)
+legacy-api/

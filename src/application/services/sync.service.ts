@@ -26,10 +26,6 @@ export interface ResetSyncResult {
 @Injectable()
 export class SyncService implements OnModuleInit {
   private readonly logger = new LoggerService(SyncService.name);
-  private readonly batchSize: number;
-  private readonly workerConcurrency: number;
-  private readonly staleSyncThresholdMinutes: number;
-  private readonly estimatedTotalRecords: number;
 
   constructor(
     @InjectQueue(SYNC_QUEUE_NAME)
@@ -37,20 +33,22 @@ export class SyncService implements OnModuleInit {
     @Inject(SYNC_LOG_REPOSITORY)
     private readonly syncLogRepository: SyncLogRepository,
     private readonly configService: ConfigService,
-  ) {
-    this.batchSize = this.configService.get<number>('SYNC_BATCH_SIZE', 1000);
-    this.workerConcurrency = this.configService.get<number>(
-      'SYNC_WORKER_CONCURRENCY',
-      1,
-    );
-    this.staleSyncThresholdMinutes = this.configService.get<number>(
-      'SYNC_STALE_THRESHOLD_MINUTES',
-      30,
-    );
-    this.estimatedTotalRecords = this.configService.get<number>(
-      'SYNC_ESTIMATED_TOTAL_RECORDS',
-      1_000_000,
-    );
+  ) {}
+
+  private get batchSize(): number {
+    return this.configService.get<number>('SYNC_BATCH_SIZE', 1000);
+  }
+
+  private get workerConcurrency(): number {
+    return this.configService.get<number>('SYNC_WORKER_CONCURRENCY', 1);
+  }
+
+  private get staleSyncThresholdMinutes(): number {
+    return this.configService.get<number>('SYNC_STALE_THRESHOLD_MINUTES', 30);
+  }
+
+  private get estimatedTotalRecords(): number {
+    return this.configService.get<number>('SYNC_ESTIMATED_TOTAL_RECORDS', 1_000_000);
   }
 
   /**
@@ -181,14 +179,9 @@ export class SyncService implements OnModuleInit {
   }
 
   private formatDuration(ms: number): string {
-    const totalSeconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-
-    if (minutes === 0) {
-      return `${seconds}s`;
-    }
-    return `${minutes}m ${seconds}s`;
+    const mins = Math.floor(ms / 60000);
+    const secs = Math.floor((ms % 60000) / 1000);
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
   }
 
   async getSyncHistory(limit: number = 10): Promise<SyncLog[]> {

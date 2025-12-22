@@ -261,23 +261,15 @@ export class HealthService {
   }
 
   private formatUptime(ms: number): string {
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    const parts: string[] = [];
-    if (days > 0) parts.push(`${days}d`);
-    if (hours % 24 > 0) parts.push(`${hours % 24}h`);
-    if (minutes % 60 > 0) parts.push(`${minutes % 60}m`);
-    if (parts.length === 0) parts.push(`${seconds}s`);
-
-    return parts.join(' ');
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60) % 60;
+    const h = Math.floor(s / 3600) % 24;
+    const d = Math.floor(s / 86400);
+    const parts = [d && `${d}d`, h && `${h}h`, m && `${m}m`].filter(Boolean);
+    return parts.length ? parts.join(' ') : `${s}s`;
   }
 
   private timeout(ms: number): Promise<never> {
-    return new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms);
-    });
+    return new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms));
   }
 }

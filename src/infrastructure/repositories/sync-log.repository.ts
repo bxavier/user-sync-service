@@ -90,26 +90,16 @@ export class SyncLogRepositoryImpl implements SyncLogRepository {
     staleThresholdMinutes: number,
     errorMessage: string,
   ): Promise<number> {
-    const thresholdDate = new Date(
-      Date.now() - staleThresholdMinutes * 60 * 1000,
-    );
+    const staleSyncs = await this.findStaleSyncs(staleThresholdMinutes);
 
-    const result = await this.repository.update(
-      {
-        status: In([
-          SyncStatus.PENDING,
-          SyncStatus.RUNNING,
-          SyncStatus.PROCESSING,
-        ]),
-        startedAt: LessThan(thresholdDate),
-      },
-      {
+    for (const sync of staleSyncs) {
+      await this.update(sync.id, {
         status: SyncStatus.FAILED,
         finishedAt: new Date(),
         errorMessage,
-      },
-    );
+      });
+    }
 
-    return result.affected ?? 0;
+    return staleSyncs.length;
   }
 }

@@ -73,21 +73,13 @@ export class SyncProcessor extends WorkerHost {
     });
 
     try {
-      // Callback chamado para cada batch de usuários recebido via streaming
       const onBatch = async (users: LegacyUser[]): Promise<void> => {
-        const callbackStart = Date.now();
         for (const user of users) {
           currentBatch.push(user);
 
-          // Quando atingir batchSize, enfileira o batch
           if (currentBatch.length >= this.batchSize) {
-            const enqueueStart = Date.now();
-            await this.enqueueBatch(syncLogId, batchNumber, currentBatch);
-            const enqueueTime = Date.now() - enqueueStart;
-            if (enqueueTime > 50) {
-              this.logger.warn('Enqueue lento', { enqueueTime, batchNumber });
-            }
             totalEnqueued += currentBatch.length;
+            await this.enqueueBatch(syncLogId, batchNumber, currentBatch, totalEnqueued);
             batchNumber++;
             currentBatch = [];
 
@@ -98,21 +90,9 @@ export class SyncProcessor extends WorkerHost {
                 totalProcessed: totalEnqueued,
               });
               await job.updateProgress({ totalEnqueued, batchNumber });
-              this.logger.log('Progresso do streaming', {
-                syncLogId,
-                totalEnqueued,
-                batchNumber,
-              });
               lastProgressUpdate = now;
             }
           }
-        }
-        const callbackTime = Date.now() - callbackStart;
-        if (callbackTime > 100) {
-          this.logger.warn('Callback onBatch lento', {
-            callbackTime,
-            usersCount: users.length,
-          });
         }
       };
 
@@ -121,8 +101,8 @@ export class SyncProcessor extends WorkerHost {
 
       // Enfileira o último batch (se houver registros restantes)
       if (currentBatch.length > 0) {
-        await this.enqueueBatch(syncLogId, batchNumber, currentBatch);
         totalEnqueued += currentBatch.length;
+        await this.enqueueBatch(syncLogId, batchNumber, currentBatch, totalEnqueued);
         batchNumber++;
       }
 
@@ -188,34 +168,25 @@ export class SyncProcessor extends WorkerHost {
     syncLogId: number,
     batchNumber: number,
     users: LegacyUser[],
+    totalEnqueued: number,
   ): Promise<void> {
-    const jobData: SyncBatchJobData = {
+    this.logger.log('Batch enfileirado', {
       syncLogId,
       batchNumber,
-      users: users.map((u) => ({
-        id: u.id,
-        userName: u.userName,
-        email: u.email,
-        createdAt: u.createdAt,
-        deleted: u.deleted,
-      })),
-    };
+      usersInBatch: users.length,
+      totalEnqueued,
+    });
 
-    await this.batchQueue.add(SYNC_BATCH_JOB_NAME, jobData, {
-      removeOnComplete: 100,
-      removeOnFail: 1000,
-      attempts: 3,
-      backoff: {
-        type: 'exponential',
-        delay: 1000,
+    await this.batchQueue.add(
+      SYNC_BATCH_JOB_NAME,
+      { syncLogId, batchNumber, users },
+      {
+        removeOnComplete: 100,
+        removeOnFail: 1000,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1000 },
       },
-    });
-
-    this.logger.debug('Batch enfileirado', {
-      syncLogId,
-      batchNumber,
-      usersCount: users.length,
-    });
+    );
   }
 
   private async scheduleRetry(

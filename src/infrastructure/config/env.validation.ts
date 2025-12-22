@@ -62,7 +62,7 @@ export class EnvironmentVariables {
   @Min(100)
   @IsOptional()
   @Transform(({ value }) => parseInt(value, 10))
-  SYNC_BATCH_SIZE: number = 2000;
+  SYNC_BATCH_SIZE: number = 1000;
 
   @IsInt()
   @Min(1)
