@@ -1,0 +1,28 @@
+{
+  "name": "users-api",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/presentation/index.js",
+  "scripts": {
+    "build": "tsc && copyfiles -u 1 src/**/*.db dist/",
+    "start": "node dist/presentation/index.js",
+    "dev": "ts-node src/presentation/index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^12.5.0",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/dotenv": "^6.1.1",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "copyfiles": "^2.4.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  }
+}

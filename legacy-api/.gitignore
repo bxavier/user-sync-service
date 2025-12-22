@@ -1,0 +1,9 @@
+# Dependencies
+node_modules/
+
+# Database (descompactado - o .gz é versionado)
+src/infrastructure/users.db
+dist/
+
+# Environment
+.env

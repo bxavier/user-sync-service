@@ -38,8 +38,6 @@ A aplicação é **facilmente deployável em AWS** utilizando serviços gerencia
 Sobe todos os serviços (API, Redis e Legacy API) com um comando:
 
 ```bash
-cd user-sync-service
-
 # Usando Make
 make dev
 
@@ -50,37 +48,29 @@ docker-compose -f docker/docker-compose.dev.yml up --build
 ### Opção 2: Desenvolvimento Local
 
 ```bash
-cd user-sync-service
-
 # 1. Suba o Redis
 docker run -d --name redis-local -p 6379:6379 redis:7-alpine
 
-# 2. Suba a API Legada (em outro terminal)
-cd ../legacy-api/api
-cp env.example .env
-docker build -t api-legada .
-docker run -m 128m --network=host api-legada
-
-# 3. Instale dependências e rode o serviço
-cd ../../user-sync-service
+# 2. Instale dependências e rode o serviço
 npm install
 cp .env.example .env
 npm run start:dev
 ```
 
+> **Nota:** O serviço requer uma API legada rodando na porta 3001. Configure `LEGACY_API_URL` e `LEGACY_API_KEY` no `.env`.
+
 ### Opção 3: Build de Produção
 
 ```bash
-cd user-sync-service
-
 # Build da imagem
 docker build -t user-sync-service -f docker/Dockerfile .
 
-# Executar (requer Redis e Legacy API rodando)
+# Executar (requer Redis rodando)
 docker run -m 128m -p 3000:3000 \
   -e REDIS_HOST=host.docker.internal \
+  -e REDIS_PORT=6379 \
   -e LEGACY_API_URL=http://host.docker.internal:3001 \
-  -e LEGACY_API_KEY=test-api-key-2024 \
+  -e LEGACY_API_KEY=your-api-key \
   user-sync-service
 ```
 
@@ -92,7 +82,7 @@ docker run -m 128m -p 3000:3000 \
 |-----|-----------|
 | http://localhost:3000 | API REST |
 | http://localhost:3000/api/docs | Swagger (documentação interativa) |
-| http://localhost:3001 | API Legada (para testes) |
+| http://localhost:3001 | API Legada (mock para testes) |
 
 ---
 
