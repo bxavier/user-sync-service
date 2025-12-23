@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { USER_REPOSITORY } from '../../domain/repositories';
 import type { UserRepository } from '../../domain/repositories';
+import { LOGGER_SERVICE } from '../../domain/services';
+import type { ILogger } from '../../domain/services';
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -14,15 +16,14 @@ import {
   PaginatedUsersResponseDto,
   ExportCsvQueryDto,
 } from '../dtos';
-import { LoggerService } from '../../infrastructure/logger';
 
 @Injectable()
 export class UserService {
-  private readonly logger = new LoggerService(UserService.name);
-
   constructor(
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
+    @Inject(LOGGER_SERVICE)
+    private readonly logger: ILogger,
   ) {}
 
   async findAll(pagination: PaginationDto): Promise<PaginatedUsersResponseDto> {

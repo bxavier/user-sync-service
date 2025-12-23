@@ -1,28 +1,34 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { Readable } from 'stream';
-import { LoggerService } from '../logger';
 import { withRetry, CircuitBreaker } from '../resilience';
-import { LegacyUser } from './legacy-user.interface';
+import {
+  LOGGER_SERVICE,
+} from '../../domain/services';
+import type {
+  ILegacyApiClient,
+  BatchCallback,
+  StreamingResult,
+  LegacyUser,
+  ILogger,
+} from '../../domain/services';
 
-export interface BatchCallback {
-  (users: LegacyUser[]): Promise<void>;
-}
-
-export interface StreamingResult {
-  totalProcessed: number;
-  totalErrors: number;
-}
-
+/**
+ * Implementação do cliente da API legada.
+ * Implementa a interface ILegacyApiClient para inversão de dependência.
+ */
 @Injectable()
-export class LegacyApiClient {
-  private readonly logger = new LoggerService(LegacyApiClient.name);
+export class LegacyApiClientImpl implements ILegacyApiClient {
   private readonly baseURL: string;
   private readonly apiKey: string;
   private readonly circuitBreaker: CircuitBreaker;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    @Inject(LOGGER_SERVICE)
+    private readonly logger: ILogger,
+  ) {
     this.baseURL = this.configService.get<string>(
       'LEGACY_API_URL',
       'http://localhost:3001',

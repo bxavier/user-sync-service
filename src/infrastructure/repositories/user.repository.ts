@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
-import { User } from '../../domain/entities';
+import { User } from '../../domain/models';
+import { UserEntity } from '../database/entities';
+import { UserMapper } from '../database/mappers';
 import {
   UserRepository,
   FindAllOptions,
@@ -15,8 +17,8 @@ import {
 @Injectable()
 export class UserRepositoryImpl implements UserRepository {
   constructor(
-    @InjectRepository(User)
-    private readonly repository: Repository<User>,
+    @InjectRepository(UserEntity)
+    private readonly repository: Repository<UserEntity>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -26,30 +28,37 @@ export class UserRepositoryImpl implements UserRepository {
 
     const where = includeDeleted ? {} : { deleted: false };
 
-    const [users, total] = await this.repository.findAndCount({
+    const [entities, total] = await this.repository.findAndCount({
       where,
       skip,
       take: limit,
       order: { createdAt: 'DESC' },
     });
 
-    return { users, total };
+    return {
+      users: entities.map((entity) => UserMapper.toDomain(entity)),
+      total,
+    };
   }
 
   async findById(id: number): Promise<User | null> {
-    return this.repository.findOne({
+    const entity = await this.repository.findOne({
       where: { id, deleted: false },
     });
+
+    return entity ? UserMapper.toDomain(entity) : null;
   }
 
   async findByUserName(userName: string): Promise<User | null> {
-    return this.repository.findOne({
+    const entity = await this.repository.findOne({
       where: { userName, deleted: false },
     });
+
+    return entity ? UserMapper.toDomain(entity) : null;
   }
 
   async create(data: CreateUserData): Promise<User> {
-    const user = this.repository.create({
+    const entity = this.repository.create({
       userName: data.userName,
       email: data.email,
       legacyId: data.legacyId ?? null,
@@ -57,34 +66,42 @@ export class UserRepositoryImpl implements UserRepository {
       deleted: false,
     });
 
-    return this.repository.save(user);
+    const savedEntity = await this.repository.save(entity);
+    return UserMapper.toDomain(savedEntity);
   }
 
   async update(id: number, data: UpdateUserData): Promise<User | null> {
-    const user = await this.findById(id);
-    if (!user) {
+    const entity = await this.repository.findOne({
+      where: { id, deleted: false },
+    });
+
+    if (!entity) {
       return null;
     }
 
     if (data.userName !== undefined) {
-      user.userName = data.userName;
+      entity.userName = data.userName;
     }
     if (data.email !== undefined) {
-      user.email = data.email;
+      entity.email = data.email;
     }
 
-    return this.repository.save(user);
+    const savedEntity = await this.repository.save(entity);
+    return UserMapper.toDomain(savedEntity);
   }
 
   async softDelete(id: number): Promise<boolean> {
-    const user = await this.findById(id);
-    if (!user) {
+    const entity = await this.repository.findOne({
+      where: { id, deleted: false },
+    });
+
+    if (!entity) {
       return false;
     }
 
-    user.deleted = true;
-    user.deletedAt = new Date();
-    await this.repository.save(user);
+    entity.deleted = true;
+    entity.deletedAt = new Date();
+    await this.repository.save(entity);
 
     return true;
   }
@@ -104,12 +121,13 @@ export class UserRepositoryImpl implements UserRepository {
         if (data.deleted) {
           existing.deletedAt = new Date();
         }
-        return this.repository.save(existing);
+        const savedEntity = await this.repository.save(existing);
+        return UserMapper.toDomain(savedEntity);
       }
-      return existing;
+      return UserMapper.toDomain(existing);
     }
 
-    const user = this.repository.create({
+    const entity = this.repository.create({
       legacyId: data.legacyId,
       userName: data.userName,
       email: data.email,
@@ -118,7 +136,8 @@ export class UserRepositoryImpl implements UserRepository {
       deletedAt: data.deleted ? new Date() : null,
     });
 
-    return this.repository.save(user);
+    const savedEntity = await this.repository.save(entity);
+    return UserMapper.toDomain(savedEntity);
   }
 
   async bulkUpsertByUserName(data: UpsertUserData[]): Promise<number> {
@@ -203,8 +222,8 @@ export class UserRepositoryImpl implements UserRepository {
         break;
       }
 
-      for (const user of batch) {
-        yield user;
+      for (const entity of batch) {
+        yield UserMapper.toDomain(entity);
       }
 
       lastId = batch[batch.length - 1].id;

@@ -6,8 +6,13 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+/**
+ * Entidade ORM para User.
+ * Contém decoradores TypeORM para mapeamento com banco de dados.
+ * Separada do modelo de domínio para respeitar Separation of Concerns.
+ */
 @Entity('users')
-export class User {
+export class UserEntity {
   @PrimaryGeneratedColumn()
   id: number;
 

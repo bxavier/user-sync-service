@@ -226,7 +226,7 @@ export class HealthService {
       }
 
       return {
-        id: syncLog.id,
+        id: syncLog.id!,
         status: syncLog.status,
         totalProcessed: syncLog.totalProcessed,
         durationMs: syncLog.durationMs ?? undefined,

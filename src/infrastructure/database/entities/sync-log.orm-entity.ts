@@ -4,32 +4,19 @@ import {
   Column,
   CreateDateColumn,
 } from 'typeorm';
+import { SyncStatus } from '../../../domain/models';
 
-export enum SyncStatus {
-  PENDING = 'pending',
-  RUNNING = 'running',
-  PROCESSING = 'processing', // Batches enfileirados, aguardando processamento
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-}
-
-const IN_PROGRESS_STATUSES = [
-  SyncStatus.PENDING,
-  SyncStatus.RUNNING,
-  SyncStatus.PROCESSING,
-];
-
+/**
+ * Entidade ORM para SyncLog.
+ * Contém decoradores TypeORM para mapeamento com banco de dados.
+ * Separada do modelo de domínio para respeitar Separation of Concerns.
+ *
+ * Nota: O enum SyncStatus e o método isInProgress() estão no modelo de domínio.
+ */
 @Entity('sync_logs')
-export class SyncLog {
+export class SyncLogEntity {
   @PrimaryGeneratedColumn()
   id: number;
-
-  /**
-   * Verifica se uma sync está em andamento (PENDING, RUNNING ou PROCESSING)
-   */
-  static isInProgress(sync: SyncLog | null): boolean {
-    return sync !== null && IN_PROGRESS_STATUSES.includes(sync.status);
-  }
 
   @Column({ type: 'varchar', length: 20, default: SyncStatus.PENDING })
   status: SyncStatus;

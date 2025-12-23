@@ -7,8 +7,10 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { join } from 'path';
 import { validate, EnvironmentVariables } from './infrastructure/config';
 import { TypeOrmLogger } from './infrastructure/database/typeorm-logger';
-import { User, SyncLog } from './domain/entities';
+import { UserEntity, SyncLogEntity } from './infrastructure/database/entities';
 import { repositoriesProviders } from './infrastructure/repositories';
+import { legacyApiProviders } from './infrastructure/legacy/legacy-api.providers';
+import { loggerProviders } from './infrastructure/logger/logger.providers';
 import { UserController, SyncController, HealthController } from './presentation/controllers';
 import { UserService, SyncService, HealthService } from './application/services';
 import {
@@ -17,7 +19,6 @@ import {
   SyncProcessor,
   SyncBatchProcessor,
 } from './infrastructure/queue';
-import { LegacyApiClient } from './infrastructure/legacy';
 
 @Module({
   imports: [
@@ -34,7 +35,7 @@ import { LegacyApiClient } from './infrastructure/legacy';
           type: 'better-sqlite3',
           database: configService.get('DATABASE_PATH'),
           entities: [
-            join(__dirname, 'domain', 'entities', '*.entity.{ts,js}'),
+            join(__dirname, 'infrastructure', 'database', 'entities', '*.orm-entity.{ts,js}'),
           ],
           synchronize:
             configService.get('NODE_ENV') !== 'production',
@@ -43,7 +44,7 @@ import { LegacyApiClient } from './infrastructure/legacy';
         };
       },
     }),
-    TypeOrmModule.forFeature([User, SyncLog]),
+    TypeOrmModule.forFeature([UserEntity, SyncLogEntity]),
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService<EnvironmentVariables>) => ({
@@ -71,12 +72,13 @@ import { LegacyApiClient } from './infrastructure/legacy';
   controllers: [UserController, SyncController, HealthController],
   providers: [
     ...repositoriesProviders,
+    ...legacyApiProviders,
+    ...loggerProviders,
     UserService,
     SyncService,
     HealthService,
     SyncProcessor,
     SyncBatchProcessor,
-    LegacyApiClient,
   ],
 })
 export class AppModule {}

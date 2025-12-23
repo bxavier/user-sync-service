@@ -1,4 +1,4 @@
-import { SyncLog, SyncStatus } from '../entities';
+import { SyncLog, SyncStatus } from '../models';
 
 export interface CreateSyncLogData {
   status?: SyncStatus;

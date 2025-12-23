@@ -9,12 +9,14 @@ import {
   SYNC_JOB_NAME,
   SYNC_RETRY_DELAY_MS,
 } from './sync.constants';
-import { LoggerService } from '../logger';
-import { LegacyApiClient } from '../legacy';
-import type { LegacyUser } from '../legacy';
 import { SYNC_LOG_REPOSITORY } from '../../domain/repositories/sync-log.repository.interface';
 import type { SyncLogRepository } from '../../domain/repositories/sync-log.repository.interface';
-import { SyncLog, SyncStatus } from '../../domain/entities';
+import { SyncLog, SyncStatus } from '../../domain/models';
+import {
+  LEGACY_API_CLIENT,
+  LOGGER_SERVICE,
+} from '../../domain/services';
+import type { ILegacyApiClient, LegacyUser, ILogger } from '../../domain/services';
 import type { SyncBatchJobData } from './sync-batch.processor';
 
 export interface SyncJobData {
@@ -31,11 +33,11 @@ export interface SyncJobResult {
 
 @Processor(SYNC_QUEUE_NAME)
 export class SyncProcessor extends WorkerHost {
-  private readonly logger = new LoggerService(SyncProcessor.name);
   private readonly batchSize: number;
 
   constructor(
-    private readonly legacyApiClient: LegacyApiClient,
+    @Inject(LEGACY_API_CLIENT)
+    private readonly legacyApiClient: ILegacyApiClient,
     @Inject(SYNC_LOG_REPOSITORY)
     private readonly syncLogRepository: SyncLogRepository,
     @InjectQueue(SYNC_BATCH_QUEUE_NAME)
@@ -43,6 +45,8 @@ export class SyncProcessor extends WorkerHost {
     @InjectQueue(SYNC_QUEUE_NAME)
     private readonly syncQueue: Queue<SyncJobData>,
     private readonly configService: ConfigService,
+    @Inject(LOGGER_SERVICE)
+    private readonly logger: ILogger,
   ) {
     super();
     this.batchSize = this.configService.get<number>('SYNC_BATCH_SIZE', 1000);
@@ -213,7 +217,7 @@ export class SyncProcessor extends WorkerHost {
 
     await this.syncQueue.add(
       SYNC_JOB_NAME,
-      { syncLogId: newSyncLog.id },
+      { syncLogId: newSyncLog.id! },
       {
         delay: SYNC_RETRY_DELAY_MS,
         removeOnComplete: 100,
@@ -223,7 +227,7 @@ export class SyncProcessor extends WorkerHost {
 
     this.logger.log('Retry agendado', {
       originalSyncLogId: syncLogId,
-      newSyncLogId: newSyncLog.id,
+      newSyncLogId: newSyncLog.id!,
       reason,
       delayMs: SYNC_RETRY_DELAY_MS,
       delayMinutes: SYNC_RETRY_DELAY_MS / 60000,

@@ -1,4 +1,4 @@
-import { LoggerService } from '../logger';
+import type { ILogger } from '../../domain/services';
 
 export interface RetryConfig {
   maxAttempts: number;
@@ -30,7 +30,7 @@ export class RetryError extends Error {
 export async function withRetry<T>(
   fn: () => Promise<T>,
   config: Partial<RetryConfig> = {},
-  logger?: LoggerService,
+  logger?: ILogger,
 ): Promise<T> {
   const cfg = { ...DEFAULT_CONFIG, ...config };
   let lastError: Error = new Error('Unknown error');

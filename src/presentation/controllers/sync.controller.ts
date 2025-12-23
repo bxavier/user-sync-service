@@ -12,7 +12,7 @@ import {
   TriggerSyncResult,
   ResetSyncResult,
 } from '../../application/services/sync.service';
-import { SyncLog } from '../../domain/entities';
+import { SyncLog } from '../../domain/models';
 import {
   SyncStatusDto,
   TriggerSyncResponseDto,

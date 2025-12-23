@@ -3,20 +3,17 @@ import { Inject, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import { SYNC_BATCH_QUEUE_NAME } from './sync.constants';
-import { LoggerService } from '../logger';
 import { USER_REPOSITORY } from '../../domain/repositories/user.repository.interface';
 import type { UserRepository } from '../../domain/repositories/user.repository.interface';
+import { LOGGER_SERVICE } from '../../domain/services';
+import type { ILogger } from '../../domain/services';
+import { UserMapper } from '../database/mappers';
+import type { LegacyUser } from '../../domain/services';
 
 export interface SyncBatchJobData {
   syncLogId: number;
   batchNumber: number;
-  users: Array<{
-    id: number;
-    userName: string;
-    email: string;
-    createdAt: string;
-    deleted: boolean;
-  }>;
+  users: LegacyUser[];
 }
 
 export interface SyncBatchJobResult {
@@ -28,12 +25,12 @@ export interface SyncBatchJobResult {
 
 @Processor(SYNC_BATCH_QUEUE_NAME)
 export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
-  private readonly logger = new LoggerService(SyncBatchProcessor.name);
-
   constructor(
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepository,
     private readonly configService: ConfigService,
+    @Inject(LOGGER_SERVICE)
+    private readonly logger: ILogger,
   ) {
     super();
   }
@@ -59,13 +56,8 @@ export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
     });
 
     try {
-      const upsertData = users.map((user) => ({
-        legacyId: user.id,
-        userName: user.userName,
-        email: user.email,
-        legacyCreatedAt: new Date(user.createdAt),
-        deleted: user.deleted,
-      }));
+      // Usa o UserMapper para converter dados do legado (DRY)
+      const upsertData = UserMapper.fromLegacyBatch(users);
 
       await this.userRepository.bulkUpsertByUserName(upsertData);
 

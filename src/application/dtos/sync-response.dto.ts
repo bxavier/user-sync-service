@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { SyncStatus } from '../../domain/entities';
+import { SyncStatus } from '../../domain/models';
 
 export class SyncStatusDto {
   @ApiProperty({ description: 'ID do log', example: 1 })

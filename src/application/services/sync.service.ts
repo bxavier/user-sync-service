@@ -3,36 +3,37 @@ import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { LoggerService } from '../../infrastructure/logger';
 import { SYNC_QUEUE_NAME, SYNC_JOB_NAME } from '../../infrastructure/queue';
 import type { SyncJobData } from '../../infrastructure/queue';
 import { SYNC_LOG_REPOSITORY } from '../../domain/repositories/sync-log.repository.interface';
 import type { SyncLogRepository } from '../../domain/repositories/sync-log.repository.interface';
-import { SyncLog, SyncStatus } from '../../domain/entities';
+import { SyncLog, SyncStatus } from '../../domain/models';
+import { LOGGER_SERVICE } from '../../domain/services';
+import type { ILogger } from '../../domain/services';
 import type { SyncStatusDto } from '../dtos';
 
 export interface TriggerSyncResult {
-  syncLogId: number;
+  syncLogId: number | undefined;
   message: string;
   alreadyRunning: boolean;
 }
 
 export interface ResetSyncResult {
-  syncLogId: number;
+  syncLogId: number | undefined;
   previousStatus: SyncStatus;
   message: string;
 }
 
 @Injectable()
 export class SyncService implements OnModuleInit {
-  private readonly logger = new LoggerService(SyncService.name);
-
   constructor(
     @InjectQueue(SYNC_QUEUE_NAME)
     private readonly syncQueue: Queue<SyncJobData>,
     @Inject(SYNC_LOG_REPOSITORY)
     private readonly syncLogRepository: SyncLogRepository,
     private readonly configService: ConfigService,
+    @Inject(LOGGER_SERVICE)
+    private readonly logger: ILogger,
   ) {}
 
   private get batchSize(): number {
@@ -107,7 +108,7 @@ export class SyncService implements OnModuleInit {
 
     await this.syncQueue.add(
       SYNC_JOB_NAME,
-      { syncLogId: syncLog.id },
+      { syncLogId: syncLog.id! },
       {
         removeOnComplete: 100,
         removeOnFail: 50,
@@ -115,7 +116,7 @@ export class SyncService implements OnModuleInit {
     );
 
     return {
-      syncLogId: syncLog.id,
+      syncLogId: syncLog.id!,
       message: 'Sincronização iniciada',
       alreadyRunning: false,
     };
@@ -162,7 +163,7 @@ export class SyncService implements OnModuleInit {
     }
 
     return {
-      id: syncLog.id,
+      id: syncLog.id!,
       status: syncLog.status,
       startedAt: syncLog.startedAt,
       finishedAt: syncLog.finishedAt,
@@ -211,19 +212,19 @@ export class SyncService implements OnModuleInit {
 
     const previousStatus = latestSync.status;
 
-    await this.syncLogRepository.update(latestSync.id, {
+    await this.syncLogRepository.update(latestSync.id!, {
       status: SyncStatus.FAILED,
       finishedAt: new Date(),
       errorMessage: 'Sync cancelada manualmente via API',
     });
 
     this.logger.warn('Sync resetada manualmente', {
-      syncLogId: latestSync.id,
+      syncLogId: latestSync.id!,
       previousStatus,
     });
 
     return {
-      syncLogId: latestSync.id,
+      syncLogId: latestSync.id!,
       previousStatus,
       message: 'Sincronização resetada com sucesso',
     };

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { User } from '../../domain/entities';
+import { User } from '../../domain/models';
 
 export class UserResponseDto {
   @ApiProperty({ description: 'ID do usuário', example: 1 })
@@ -32,7 +32,7 @@ export class UserResponseDto {
 
   static fromEntity(user: User): UserResponseDto {
     const dto = new UserResponseDto();
-    dto.id = user.id;
+    dto.id = user.id!;
     dto.userName = user.userName;
     dto.email = user.email;
     dto.legacyCreatedAt = user.legacyCreatedAt;

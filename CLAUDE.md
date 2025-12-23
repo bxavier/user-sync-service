@@ -52,15 +52,66 @@ Serviço de integração que sincroniza dados de um sistema legado instável (~1
                                                └─────────────────┘
 ```
 
-### Camadas DDD
+### Camadas DDD (Clean Architecture)
 
 ```
 src/
-├── domain/           # Entidades e interfaces de repositório
-├── application/      # Serviços e DTOs
-├── infrastructure/   # Implementações concretas
-└── presentation/     # Controllers e filtros
+├── domain/           # Modelos puros, interfaces de repositório e serviços
+├── application/      # Casos de uso (services) e DTOs
+├── infrastructure/   # Implementações concretas (ORM, APIs externas, filas)
+└── presentation/     # Controllers e filtros HTTP
 ```
+
+### Inversão de Dependência (DIP)
+
+O domínio define interfaces abstratas que a infraestrutura implementa:
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│ DOMAIN (Núcleo - Sem dependências externas)                        │
+├────────────────────────────────────────────────────────────────────┤
+│  models/                    │ Modelos puros de domínio             │
+│    ├── User                 │ - Sem decorators ORM                 │
+│    └── SyncLog              │ - Apenas lógica de negócio           │
+├────────────────────────────────────────────────────────────────────┤
+│  repositories/              │ Interfaces de persistência           │
+│    ├── UserRepository       │ - Contrato abstrato                  │
+│    └── SyncLogRepository    │ - Symbol tokens para DI              │
+├────────────────────────────────────────────────────────────────────┤
+│  services/                  │ Interfaces de serviços externos      │
+│    ├── ILegacyApiClient     │ - Abstração da API legada            │
+│    └── ILogger              │ - Abstração do logger                │
+└────────────────────────────────────────────────────────────────────┘
+                              ▲
+                              │ implementa
+                              │
+┌────────────────────────────────────────────────────────────────────┐
+│ INFRASTRUCTURE (Implementações Concretas)                          │
+├────────────────────────────────────────────────────────────────────┤
+│  database/entities/         │ Entidades ORM (TypeORM)              │
+│    ├── UserEntity           │ - Com decorators @Entity, @Column   │
+│    └── SyncLogEntity        │ - Acopladas ao TypeORM               │
+├────────────────────────────────────────────────────────────────────┤
+│  database/mappers/          │ Data Mappers (Conversão)             │
+│    ├── UserMapper           │ - toDomain(entity): Model            │
+│    └── SyncLogMapper        │ - toEntity(model): Entity            │
+├────────────────────────────────────────────────────────────────────┤
+│  repositories/              │ Implementações dos repositórios      │
+│    ├── UserRepositoryImpl   │ - Usa TypeORM + Mappers              │
+│    └── SyncLogRepositoryImpl│ - Retorna modelos de domínio         │
+├────────────────────────────────────────────────────────────────────┤
+│  legacy/                    │ Cliente da API legada                │
+│    └── LegacyApiClientImpl  │ - Implementa ILegacyApiClient        │
+├────────────────────────────────────────────────────────────────────┤
+│  logger/                    │ Logger customizado                   │
+│    └── LoggerService        │ - Implementa ILogger                 │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Benefícios:**
+- Domínio testável sem mocks de banco de dados
+- Fácil trocar implementações (ex: SQLite → PostgreSQL)
+- Baixo acoplamento entre camadas
 
 ---
 
@@ -197,12 +248,17 @@ src/
 ├── app.module.ts                    # Módulo principal
 ├── main.ts                          # Bootstrap Fastify
 ├── domain/
-│   ├── entities/
-│   │   ├── user.entity.ts           # User (soft delete)
-│   │   └── sync-log.entity.ts       # SyncLog (enum SyncStatus)
-│   └── repositories/
-│       ├── user.repository.interface.ts
-│       └── sync-log.repository.interface.ts
+│   ├── models/                      # Modelos de domínio puros
+│   │   ├── user.model.ts            # User (sem ORM)
+│   │   ├── sync-log.model.ts        # SyncLog + SyncStatus enum
+│   │   └── index.ts
+│   ├── repositories/                # Interfaces de repositório
+│   │   ├── user.repository.interface.ts
+│   │   └── sync-log.repository.interface.ts
+│   └── services/                    # Interfaces de serviços externos
+│       ├── legacy-api.interface.ts  # ILegacyApiClient + LegacyUser
+│       ├── logger.interface.ts      # ILogger
+│       └── index.ts
 ├── application/
 │   ├── services/
 │   │   ├── user.service.ts          # CRUD + CSV export
@@ -213,10 +269,27 @@ src/
 │   ├── config/
 │   │   ├── env.validation.ts        # Validação env vars
 │   │   └── swagger.config.ts
-│   ├── database/                    # TypeOrmLogger
-│   ├── logger/                      # CustomLoggerService
+│   ├── database/
+│   │   ├── entities/                # Entidades ORM (TypeORM)
+│   │   │   ├── user.orm-entity.ts
+│   │   │   ├── sync-log.orm-entity.ts
+│   │   │   └── index.ts
+│   │   ├── mappers/                 # Data Mappers
+│   │   │   ├── user.mapper.ts
+│   │   │   ├── sync-log.mapper.ts
+│   │   │   └── index.ts
+│   │   └── typeorm-logger.ts
+│   ├── logger/
+│   │   ├── custom-logger.service.ts # Implementa ILogger
+│   │   └── logger.providers.ts      # Provider DI
 │   ├── repositories/                # Implementações TypeORM
-│   ├── legacy/                      # LegacyApiClient
+│   │   ├── user.repository.ts
+│   │   ├── sync-log.repository.ts
+│   │   └── index.ts
+│   ├── legacy/
+│   │   ├── legacy-api.client.ts     # Implementa ILegacyApiClient
+│   │   ├── legacy-api.providers.ts  # Provider DI
+│   │   └── index.ts
 │   ├── resilience/                  # Retry, CircuitBreaker
 │   └── queue/                       # BullMQ processors
 └── presentation/
@@ -263,13 +336,60 @@ export class CreateUserDto {
 
 ---
 
-## Princípios
+## Princípios e Design Patterns
 
-- **SOLID** aplicado pragmaticamente
-- **KISS** - simplicidade sobre complexidade
-- **YAGNI** - não implementar o que não é necessário
-- **DRY** - evite repetição desnecessária de código
-- **Controllers thin** - lógica apenas nos services
+### SOLID
+
+| Princípio | Aplicação |
+|-----------|-----------|
+| **S**RP (Single Responsibility) | Cada classe tem uma responsabilidade única (Service, Repository, Mapper) |
+| **O**CP (Open/Closed) | Services extensíveis via injeção de dependência |
+| **L**SP (Liskov Substitution) | Implementações respeitam contratos das interfaces |
+| **I**SP (Interface Segregation) | Interfaces focadas (ILogger, ILegacyApiClient) |
+| **D**IP (Dependency Inversion) | Domínio define interfaces, infraestrutura implementa |
+
+### Outros Princípios
+
+- **KISS** - Simplicidade sobre complexidade
+- **YAGNI** - Não implementar o que não é necessário
+- **DRY** - Centralização via Data Mappers
+- **Controllers thin** - Lógica apenas nos services
+
+### Design Patterns Aplicados
+
+| Pattern | Uso |
+|---------|-----|
+| **Repository** | Abstração de persistência (`UserRepository`, `SyncLogRepository`) |
+| **Data Mapper** | Conversão Entity ↔ Model (`UserMapper`, `SyncLogMapper`) |
+| **Adapter** | `LegacyApiClientImpl` adapta API legada para interface interna |
+| **Dependency Injection** | NestJS providers com Symbol tokens |
+
+### Injeção de Dependência
+
+```typescript
+// 1. Definir interface e token no domínio
+export const LOGGER_SERVICE = Symbol('LOGGER_SERVICE');
+export interface ILogger {
+  log(message: string, context?: LogContext): void;
+  warn(message: string, context?: LogContext): void;
+  error(message: string, context?: LogContext): void;
+}
+
+// 2. Implementar na infraestrutura
+@Injectable()
+export class LoggerService implements ILogger { ... }
+
+// 3. Configurar provider
+export const loggerProviders: Provider[] = [
+  { provide: LOGGER_SERVICE, useClass: LoggerService }
+];
+
+// 4. Injetar via token
+constructor(
+  @Inject(LOGGER_SERVICE)
+  private readonly logger: ILogger,
+) {}
+```
 
 ---
 

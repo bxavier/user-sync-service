@@ -1,3 +1,2 @@
-export { LegacyApiClient } from './legacy-api.client';
-export type { BatchCallback, StreamingResult } from './legacy-api.client';
-export type { LegacyUser } from './legacy-user.interface';
+export { LegacyApiClientImpl } from './legacy-api.client';
+export { legacyApiProviders } from './legacy-api.providers';

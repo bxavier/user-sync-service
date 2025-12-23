@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, LessThan } from 'typeorm';
-import { SyncLog, SyncStatus } from '../../domain/entities';
+import { SyncLog, SyncStatus } from '../../domain/models';
+import { SyncLogEntity } from '../database/entities';
+import { SyncLogMapper } from '../database/mappers';
 import {
   SyncLogRepository,
   CreateSyncLogData,
@@ -11,46 +13,49 @@ import {
 @Injectable()
 export class SyncLogRepositoryImpl implements SyncLogRepository {
   constructor(
-    @InjectRepository(SyncLog)
-    private readonly repository: Repository<SyncLog>,
+    @InjectRepository(SyncLogEntity)
+    private readonly repository: Repository<SyncLogEntity>,
   ) {}
 
   async create(data: CreateSyncLogData = {}): Promise<SyncLog> {
-    const syncLog = this.repository.create({
+    const entity = this.repository.create({
       status: data.status ?? SyncStatus.PENDING,
       totalProcessed: 0,
     });
 
-    return this.repository.save(syncLog);
+    const savedEntity = await this.repository.save(entity);
+    return SyncLogMapper.toDomain(savedEntity);
   }
 
   async update(id: number, data: UpdateSyncLogData): Promise<SyncLog | null> {
-    const syncLog = await this.findById(id);
-    if (!syncLog) {
+    const entity = await this.repository.findOne({ where: { id } });
+    if (!entity) {
       return null;
     }
 
     if (data.status !== undefined) {
-      syncLog.status = data.status;
+      entity.status = data.status;
     }
     if (data.finishedAt !== undefined) {
-      syncLog.finishedAt = data.finishedAt;
+      entity.finishedAt = data.finishedAt;
     }
     if (data.totalProcessed !== undefined) {
-      syncLog.totalProcessed = data.totalProcessed;
+      entity.totalProcessed = data.totalProcessed;
     }
     if (data.errorMessage !== undefined) {
-      syncLog.errorMessage = data.errorMessage;
+      entity.errorMessage = data.errorMessage;
     }
     if (data.durationMs !== undefined) {
-      syncLog.durationMs = data.durationMs;
+      entity.durationMs = data.durationMs;
     }
 
-    return this.repository.save(syncLog);
+    const savedEntity = await this.repository.save(entity);
+    return SyncLogMapper.toDomain(savedEntity);
   }
 
   async findById(id: number): Promise<SyncLog | null> {
-    return this.repository.findOne({ where: { id } });
+    const entity = await this.repository.findOne({ where: { id } });
+    return entity ? SyncLogMapper.toDomain(entity) : null;
   }
 
   async findLatest(): Promise<SyncLog | null> {
@@ -58,14 +63,15 @@ export class SyncLogRepositoryImpl implements SyncLogRepository {
       order: { startedAt: 'DESC' },
       take: 1,
     });
-    return results[0] ?? null;
+    return results[0] ? SyncLogMapper.toDomain(results[0]) : null;
   }
 
   async findAll(limit = 10): Promise<SyncLog[]> {
-    return this.repository.find({
+    const entities = await this.repository.find({
       order: { startedAt: 'DESC' },
       take: limit,
     });
+    return entities.map((entity) => SyncLogMapper.toDomain(entity));
   }
 
   async findStaleSyncs(staleThresholdMinutes: number): Promise<SyncLog[]> {
@@ -73,7 +79,7 @@ export class SyncLogRepositoryImpl implements SyncLogRepository {
       Date.now() - staleThresholdMinutes * 60 * 1000,
     );
 
-    return this.repository.find({
+    const entities = await this.repository.find({
       where: {
         status: In([
           SyncStatus.PENDING,
@@ -84,6 +90,8 @@ export class SyncLogRepositoryImpl implements SyncLogRepository {
       },
       order: { startedAt: 'DESC' },
     });
+
+    return entities.map((entity) => SyncLogMapper.toDomain(entity));
   }
 
   async markStaleAsFailed(
@@ -93,7 +101,7 @@ export class SyncLogRepositoryImpl implements SyncLogRepository {
     const staleSyncs = await this.findStaleSyncs(staleThresholdMinutes);
 
     for (const sync of staleSyncs) {
-      await this.update(sync.id, {
+      await this.update(sync.id!, {
         status: SyncStatus.FAILED,
         finishedAt: new Date(),
         errorMessage,
