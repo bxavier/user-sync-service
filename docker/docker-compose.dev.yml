@@ -35,7 +35,7 @@ services:
     restart: unless-stopped
 
   legacy-api:
-    build: ../legacy-api
+    build: ./legacy-api
     ports:
       - "3001:3001"
     environment:

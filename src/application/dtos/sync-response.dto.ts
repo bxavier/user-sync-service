@@ -1,66 +1,66 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { SyncStatus } from '../../domain/models';
+import { SyncStatus } from '@/domain/models';
 
 export class SyncStatusDto {
-  @ApiProperty({ description: 'ID do log', example: 1 })
+  @ApiProperty({ description: 'Log ID', example: 1 })
   id: number;
 
   @ApiProperty({
-    description: 'Status da sincronização',
+    description: 'Synchronization status',
     enum: SyncStatus,
     example: SyncStatus.COMPLETED,
   })
   status: SyncStatus;
 
-  @ApiProperty({ description: 'Data de início' })
+  @ApiProperty({ description: 'Start date' })
   startedAt: Date;
 
-  @ApiProperty({ description: 'Data de término', nullable: true })
+  @ApiProperty({ description: 'End date', nullable: true })
   finishedAt: Date | null;
 
-  @ApiProperty({ description: 'Total de registros processados', example: 150 })
+  @ApiProperty({ description: 'Total records processed', example: 150 })
   totalProcessed: number;
 
-  @ApiProperty({ description: 'Mensagem de erro', nullable: true })
+  @ApiProperty({ description: 'Error message', nullable: true })
   errorMessage: string | null;
 
-  @ApiProperty({ description: 'Duração em milissegundos', nullable: true })
+  @ApiProperty({ description: 'Duration in milliseconds', nullable: true })
   durationMs: number | null;
 
-  @ApiProperty({ description: 'Duração formatada', example: '2m 30s' })
+  @ApiProperty({ description: 'Formatted duration', example: '2m 30s' })
   durationFormatted: string | null;
 
-  @ApiProperty({ description: 'Registros por segundo', example: 625.5 })
+  @ApiProperty({ description: 'Records per second', example: 625.5 })
   recordsPerSecond: number | null;
 
-  @ApiProperty({ description: 'Tempo estimado restante', example: '5m 20s' })
+  @ApiProperty({ description: 'Estimated time remaining', example: '5m 20s' })
   estimatedTimeRemaining: string | null;
 
   @ApiProperty({
-    description: 'Percentual de progresso (estimado)',
+    description: 'Progress percentage (estimated)',
     example: 75.5,
   })
   progressPercent: number | null;
 
-  @ApiProperty({ description: 'Tamanho do batch', example: 1000 })
+  @ApiProperty({ description: 'Batch size', example: 1000 })
   batchSize: number;
 
-  @ApiProperty({ description: 'Número de workers', example: 5 })
+  @ApiProperty({ description: 'Number of workers', example: 5 })
   workerConcurrency: number;
 }
 
 export class TriggerSyncResponseDto {
-  @ApiProperty({ description: 'ID do log de sincronização', example: 1 })
+  @ApiProperty({ description: 'Synchronization log ID', example: 1 })
   syncLogId: number;
 
   @ApiProperty({
-    description: 'Mensagem de status',
-    example: 'Sincronização iniciada',
+    description: 'Status message',
+    example: 'Sync started',
   })
   message: string;
 
   @ApiProperty({
-    description: 'Se já havia uma sincronização em andamento',
+    description: 'Whether there was already a synchronization in progress',
     example: false,
   })
   alreadyRunning: boolean;
@@ -68,21 +68,21 @@ export class TriggerSyncResponseDto {
 
 export class ResetSyncResponseDto {
   @ApiProperty({
-    description: 'ID do log de sincronização resetado',
+    description: 'Reset synchronization log ID',
     example: 1,
   })
   syncLogId: number;
 
   @ApiProperty({
-    description: 'Status anterior da sincronização',
+    description: 'Previous synchronization status',
     enum: SyncStatus,
     example: SyncStatus.RUNNING,
   })
   previousStatus: SyncStatus;
 
   @ApiProperty({
-    description: 'Mensagem de confirmação',
-    example: 'Sincronização resetada com sucesso',
+    description: 'Confirmation message',
+    example: 'Sync reset successfully',
   })
   message: string;
 }

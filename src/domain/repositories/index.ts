@@ -1,16 +1,12 @@
 export { USER_REPOSITORY } from './user.repository.interface';
 export type {
-  UserRepository,
+  CreateUserData,
   FindAllOptions,
   FindAllResult,
-  CreateUserData,
   UpdateUserData,
   UpsertUserData,
+  UserRepository,
 } from './user.repository.interface';
 
 export { SYNC_LOG_REPOSITORY } from './sync-log.repository.interface';
-export type {
-  SyncLogRepository,
-  CreateSyncLogData,
-  UpdateSyncLogData,
-} from './sync-log.repository.interface';
+export type { CreateSyncLogData, SyncLogRepository, UpdateSyncLogData } from './sync-log.repository.interface';

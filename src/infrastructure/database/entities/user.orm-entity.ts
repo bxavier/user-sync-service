@@ -1,15 +1,9 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
 /**
- * Entidade ORM para User.
- * Contém decoradores TypeORM para mapeamento com banco de dados.
- * Separada do modelo de domínio para respeitar Separation of Concerns.
+ * ORM Entity for User.
+ * Contains TypeORM decorators for database mapping.
+ * Separated from domain model to respect Separation of Concerns.
  */
 @Entity('users')
 export class UserEntity {

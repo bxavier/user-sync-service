@@ -5,5 +5,5 @@ data
 .git
 *.md
 
-# Legacy API (separate build)
-legacy-api/
+# Legacy API (separate build in docker/)
+docker/legacy-api/

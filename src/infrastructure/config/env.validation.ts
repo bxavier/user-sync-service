@@ -1,13 +1,5 @@
 import { plainToInstance, Transform } from 'class-transformer';
-import {
-  IsBoolean,
-  IsEnum,
-  IsInt,
-  IsOptional,
-  IsString,
-  Min,
-  validateSync,
-} from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Min, validateSync } from 'class-validator';
 
 export enum Environment {
   Development = 'development',
@@ -39,7 +31,7 @@ export class EnvironmentVariables {
     if (typeof value === 'string') return value.toLowerCase() !== 'false';
     return true;
   })
-  TYPEORM_LOGGING: boolean = true;
+  TYPEORM_LOGGING: boolean = false;
 
   // Redis
   @IsString()
@@ -100,6 +92,7 @@ export class EnvironmentVariables {
   @IsOptional()
   @Transform(({ value }) => parseInt(value, 10))
   RATE_LIMIT_MAX: number = 100;
+
 }
 
 export function validate(config: Record<string, unknown>) {
@@ -112,9 +105,7 @@ export function validate(config: Record<string, unknown>) {
   if (errors.length > 0) {
     const errorMessages = errors
       .map((error) => {
-        const constraints = error.constraints
-          ? Object.values(error.constraints).join(', ')
-          : 'unknown error';
+        const constraints = error.constraints ? Object.values(error.constraints).join(', ') : 'unknown error';
         return `${error.property}: ${constraints}`;
       })
       .join('\n');

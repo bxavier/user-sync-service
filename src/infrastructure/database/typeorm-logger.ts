@@ -42,11 +42,7 @@ export class TypeOrmLogger implements Logger {
     this.logger.log(message);
   }
 
-  log(
-    level: 'log' | 'info' | 'warn',
-    message: unknown,
-    _queryRunner?: QueryRunner,
-  ) {
+  log(level: 'log' | 'info' | 'warn', message: unknown, _queryRunner?: QueryRunner) {
     switch (level) {
       case 'warn':
         this.logger.warn(String(message));

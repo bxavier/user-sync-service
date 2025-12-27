@@ -4,9 +4,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 export function setupSwagger(app: INestApplication): void {
   const config = new DocumentBuilder()
     .setTitle('User Sync Service API')
-    .setDescription(
-      'API for user management and legacy system synchronization',
-    )
+    .setDescription('API for user management and legacy system synchronization')
     .setVersion('1.0')
     .setContact('Bruno Xavier', 'https://brunoxavier.com.br', 'bruno@brunoxavier.com.br')
     .setLicense('MIT', 'https://opensource.org/licenses/MIT')

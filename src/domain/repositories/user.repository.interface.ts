@@ -1,4 +1,4 @@
-import { User } from '../models';
+import { User } from '@/domain/models';
 
 export interface FindAllOptions {
   page?: number;

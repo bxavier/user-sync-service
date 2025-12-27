@@ -1,5 +1,12 @@
 # User Sync Service - Teste Técnico
 
+![Node.js](https://img.shields.io/badge/Node.js-18+-green)
+![NestJS](https://img.shields.io/badge/NestJS-10-red)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
+![Coverage](https://img.shields.io/badge/Coverage-94%25-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-294-brightgreen)
+![License](https://img.shields.io/badge/License-MIT-yellow)
+
 Serviço de integração que sincroniza dados de um sistema legado instável, mantém base própria e disponibiliza endpoints REST.
 
 ## Sobre o Projeto
@@ -13,7 +20,7 @@ Este serviço foi desenvolvido como solução para o desafio de integração com
 
 O serviço implementa padrões de resiliência para lidar com essas instabilidades e processa **~1 milhão de usuários em ~18-20 minutos**.
 
-> **📦 Projeto Self-Contained:** A API legada (mock) está incluída na pasta `legacy-api/` com ~1M de usuários. Execute `make dev` para subir tudo automaticamente.
+> **📦 Projeto Self-Contained:** A API legada (mock) está incluída na pasta `docker/legacy-api/` com ~1M de usuários. Execute `make dev` para subir tudo automaticamente.
 
 A aplicação é **facilmente deployável em AWS** utilizando serviços gerenciados como ECS Fargate, ElastiCache (Redis) e RDS PostgreSQL. Veja a arquitetura proposta em [docs/AWS_ARCHITECTURE.md](docs/AWS_ARCHITECTURE.md).
 
@@ -59,7 +66,7 @@ cp .env.example .env
 npm run start:dev
 ```
 
-> **Nota:** O serviço requer a API legada rodando na porta 3001. Ela está incluída em `legacy-api/` ou configure `LEGACY_API_URL` e `LEGACY_API_KEY` no `.env` para apontar para outra instância.
+> **Nota:** O serviço requer a API legada rodando na porta 3001. Ela está incluída em `docker/legacy-api/` ou configure `LEGACY_API_URL` e `LEGACY_API_KEY` no `.env` para apontar para outra instância.
 
 ### Opção 3: Build de Produção
 
@@ -107,15 +114,36 @@ docker run -m 128m -p 3000:3000 \
 | ------ | --------------- | ---------------------------------------- |
 | `POST` | `/sync`         | Dispara sincronização com sistema legado |
 | `GET`  | `/sync/status`  | Status da última sync (com métricas)     |
-| `GET`  | `/sync/history` | Histórico de sincronizações              |
+| `GET`  | `/sync/history` | Histórico de sincronizações (`?limit=N`) |
 | `POST` | `/sync/reset`   | Reseta sync travada                      |
+
+> **Sincronização Automática:** A cada 6 horas, o serviço executa automaticamente uma sincronização via `@Cron(EVERY_6_HOURS)`.
+
+#### Response: `GET /sync/status`
+
+```json
+{
+  "id": 1,
+  "status": "COMPLETED",
+  "startedAt": "2025-01-15T10:00:00.000Z",
+  "finishedAt": "2025-01-15T10:20:00.000Z",
+  "totalProcessed": 1000000,
+  "errorMessage": null,
+  "durationMs": 1200000,
+  "durationFormatted": "20m 0s",
+  "recordsPerSecond": 833.33,
+  "estimatedTimeRemaining": null,
+  "progressPercent": 100,
+  "batchSize": 1000,
+  "workerConcurrency": 5
+}
+```
 
 ### Health Check (`/health`)
 
-| Método | Rota              | Descrição                                  |
-| ------ | ----------------- | ------------------------------------------ |
-| `GET`  | `/health`         | Liveness probe (para load balancers)       |
-| `GET`  | `/health/details` | Readiness probe com status dos componentes |
+| Método | Rota      | Descrição                            |
+| ------ | --------- | ------------------------------------ |
+| `GET`  | `/health` | Liveness probe (para load balancers) |
 
 **Status possíveis:** `healthy`, `degraded`, `unhealthy` (HTTP 503)
 
@@ -123,24 +151,100 @@ docker run -m 128m -p 3000:3000 \
 
 ## Variáveis de Ambiente
 
-| Variável                       | Obrigatório | Default                  | Descrição                                |
-| ------------------------------ | ----------- | ------------------------ | ---------------------------------------- |
-| `NODE_ENV`                     | Não         | `development`            | Ambiente (development, production, test) |
-| `PORT`                         | Não         | `3000`                   | Porta do servidor                        |
-| `DATABASE_PATH`                | Não         | `./data/database.sqlite` | Caminho do SQLite                        |
-| `TYPEORM_LOGGING`              | Não         | `false`                  | Habilita logs SQL                        |
-| `REDIS_HOST`                   | **Sim**     | -                        | Host do Redis                            |
-| `REDIS_PORT`                   | **Sim**     | -                        | Porta do Redis                           |
-| `LEGACY_API_URL`               | **Sim**     | -                        | URL da API legada                        |
-| `LEGACY_API_KEY`               | **Sim**     | -                        | Chave de autenticação                    |
-| `SYNC_BATCH_SIZE`              | Não         | `1000`                   | Usuários por batch                       |
-| `SYNC_WORKER_CONCURRENCY`      | Não         | `1`                      | Workers paralelos                        |
-| `SYNC_STALE_THRESHOLD_MINUTES` | Não         | `30`                     | Timeout para sync travada (min)          |
-| `SYNC_ESTIMATED_TOTAL_RECORDS` | Não         | `1000000`                | Estimativa de registros no legado        |
-| `RATE_LIMIT_TTL`               | Não         | `60`                     | Janela de rate limit (segundos)          |
-| `RATE_LIMIT_MAX`               | Não         | `100`                    | Máximo de requests por janela            |
+| Variável                       | Obrigatório | Default                  | Descrição                                  |
+| ------------------------------ | ----------- | ------------------------ | ------------------------------------------ |
+| `NODE_ENV`                     | Não         | `development`            | Ambiente (development, production, test)   |
+| `PORT`                         | Não         | `3000`                   | Porta do servidor                          |
+| `DATABASE_PATH`                | Não         | `./data/database.sqlite` | Caminho do SQLite                          |
+| `TYPEORM_LOGGING`              | Não         | `false`                  | Habilita logs SQL                          |
+| `REDIS_HOST`                   | **Sim**     | -                        | Host do Redis                              |
+| `REDIS_PORT`                   | **Sim**     | -                        | Porta do Redis                             |
+| `LEGACY_API_URL`               | **Sim**     | -                        | URL da API legada                          |
+| `LEGACY_API_KEY`               | **Sim**     | -                        | Chave de autenticação                      |
+| `SYNC_BATCH_SIZE`              | Não         | `1000`                   | Usuários por batch                         |
+| `SYNC_WORKER_CONCURRENCY`      | Não         | `1`                      | Workers paralelos (sync queue)             |
+| `SYNC_BATCH_CONCURRENCY`       | Não         | `5`                      | Workers paralelos (batch queue)            |
+| `SYNC_STALE_THRESHOLD_MINUTES` | Não         | `30`                     | Timeout para sync travada (min)            |
+| `SYNC_ESTIMATED_TOTAL_RECORDS` | Não         | `1000000`                | Estimativa de registros no legado          |
+| `RATE_LIMIT_TTL`               | Não         | `60`                     | Janela de rate limit (segundos)\*          |
+| `RATE_LIMIT_MAX`               | Não         | `100`                    | Máximo de requests por janela\*            |
+| `LOG_LEVEL`                    | Não         | `info`                   | Nível de log (trace/debug/info/warn/error) |
+| `SERVICE_NAME`                 | Não         | `user-sync-service`      | Nome do serviço nos logs                   |
+
+> \* **Rate Limiting:** O throttling está configurado na aplicação. Para proteger rotas, aplique `@UseGuards(ThrottlerGuard)` nos controllers desejados ou configure globalmente com `APP_GUARD`.
 
 Exemplo completo em [.env.example](.env.example).
+
+---
+
+## Fluxo de Sincronização
+
+```mermaid
+flowchart LR
+    subgraph Client
+        API["POST /sync"]
+    end
+
+    subgraph Queues["BullMQ"]
+        SQ[["Sync Queue"]]
+        BQ[["Batch Queue"]]
+    end
+
+    subgraph Workers
+        SP["SyncProcessor"]
+        BP["BatchProcessor<br/>x5 workers"]
+    end
+
+    subgraph External
+        Legacy["Legacy API<br/>:3001"]
+    end
+
+    subgraph Storage
+        DB[("SQLite")]
+    end
+
+    API --> SQ
+    SQ --> SP
+    SP <-.->|"streaming"| Legacy
+    SP -->|"1000 users/batch"| BQ
+    BQ --> BP
+    BP -->|"bulk upsert"| DB
+```
+
+<details>
+<summary>Diagrama ASCII (fallback)</summary>
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────────┐
+│ POST /sync  │────▶│ Sync Queue  │────▶│  SyncProcessor  │
+│ (Controller)│     │  (BullMQ)   │     │  (Orquestrador) │
+└─────────────┘     └─────────────┘     └────────┬────────┘
+                                                 │ streaming
+                                                 ▼
+┌─────────────┐                        ┌─────────────────┐
+│ Legacy API  │◀──────streaming────────│ LegacyApiClient │
+│  (:3001)    │                        │  (axios stream) │
+└─────────────┘                        └────────┬────────┘
+                                                │ batch (1000 users)
+                                                ▼
+                                       ┌─────────────────┐
+                                       │  Batch Queue    │
+                                       │    (BullMQ)     │
+                                       └────────┬────────┘
+                                                │ x5 parallel workers
+                                                ▼
+                                       ┌─────────────────┐
+                                       │ BatchProcessor  │
+                                       │  (bulk upsert)  │
+                                       └────────┬────────┘
+                                                │
+                                                ▼
+                                       ┌─────────────────┐
+                                       │    SQLite DB    │
+                                       └─────────────────┘
+```
+
+</details>
 
 ---
 
@@ -149,26 +253,42 @@ Exemplo completo em [.env.example](.env.example).
 ```
 .
 ├── src/                  # Código principal do serviço
-│   ├── domain/           # Entidades e interfaces de repositório
-│   │   ├── entities/     # User, SyncLog
-│   │   └── repositories/ # Interfaces (contratos)
-│   ├── application/      # Lógica de negócio
+│   ├── domain/           # Núcleo isolado (Clean Architecture)
+│   │   ├── models/       # Modelos puros (User, SyncLog) - sem ORM
+│   │   ├── repositories/ # Interfaces de persistência (contratos)
+│   │   └── services/     # Interfaces de serviços externos (ILogger, ILegacyApiClient)
+│   ├── application/      # Casos de uso
 │   │   ├── services/     # UserService, SyncService, HealthService
 │   │   └── dtos/         # Validação de entrada/saída
-│   ├── infrastructure/   # Implementações técnicas
+│   ├── infrastructure/   # Implementações concretas
 │   │   ├── config/       # Validação de env vars
-│   │   ├── legacy/       # Cliente da API legada
+│   │   ├── database/     # Entidades ORM e Data Mappers
+│   │   ├── legacy/       # Cliente da API legada (Axios)
+│   │   ├── logger/       # LoggerService (implementa ILogger)
 │   │   ├── queue/        # Processadores BullMQ
 │   │   ├── repositories/ # Implementações TypeORM
 │   │   └── resilience/   # Circuit breaker, retry
 │   └── presentation/     # Camada HTTP
 │       ├── controllers/  # REST endpoints
-│       └── filters/      # Tratamento de erros
-├── legacy-api/           # API legada mock (self-contained)
-│   └── src/              # Express + SQLite (~1M usuários)
+│       ├── filters/      # Tratamento de erros
+│       └── interceptors/ # Logging de requests/responses
 └── docker/               # Configurações Docker
     ├── Dockerfile        # Build de produção
-    └── docker-compose.dev.yml
+    ├── docker-compose.dev.yml
+    └── legacy-api/       # API legada mock (~1M usuários)
+```
+
+---
+
+## Logging
+
+O serviço usa o logger padrão do NestJS (`ConsoleLogger`) implementando a interface `ILogger` para inversão de dependência.
+
+Um `LoggingInterceptor` global loga automaticamente todas as requests e responses:
+
+```
+[HTTP] Request  { method: 'POST', url: '/users', body: { userName: 'john', ... } }
+[HTTP] Response { method: 'POST', url: '/users', statusCode: 201, duration: '15ms', body: {...} }
 ```
 
 ---
@@ -242,40 +362,54 @@ npm run test:e2e     # Testes end-to-end
 
 ## Testando a API
 
-### 1. Disparar Sincronização
+### Sincronização
 
 ```bash
+# Disparar sincronização
 curl -X POST http://localhost:3000/sync
-```
 
-### 2. Verificar Status
-
-```bash
+# Verificar status (inclui progresso e métricas)
 curl http://localhost:3000/sync/status
+
+# Histórico de sincronizações
+curl http://localhost:3000/sync/history
+
+# Resetar sync travada
+curl -X POST http://localhost:3000/sync/reset
 ```
 
-### 3. Listar Usuários
+### Usuários (CRUD)
 
 ```bash
+# Listar com paginação
 curl "http://localhost:3000/users?page=1&limit=10"
-```
 
-### 4. Buscar por Username
-
-```bash
+# Buscar por username
 curl http://localhost:3000/users/john_doe
+
+# Criar usuário
+curl -X POST http://localhost:3000/users \
+  -H "Content-Type: application/json" \
+  -d '{"userName": "new_user", "email": "user@example.com", "name": "New User"}'
+
+# Atualizar usuário
+curl -X PUT http://localhost:3000/users/1 \
+  -H "Content-Type: application/json" \
+  -d '{"email": "updated@example.com"}'
+
+# Deletar usuário (soft delete)
+curl -X DELETE http://localhost:3000/users/1
+
+# Exportar CSV (com filtros opcionais)
+curl "http://localhost:3000/users/export/csv?created_from=2024-01-01&created_to=2024-12-31" > users.csv
 ```
 
-### 5. Exportar CSV
+### Health & Métricas
 
 ```bash
-curl "http://localhost:3000/users/export/csv?created_from=2024-01-01" > users.csv
-```
+# Health check
+curl http://localhost:3000/health
 
-### 6. Health Check
-
-```bash
-curl http://localhost:3000/health/details
 ```
 
 ---
@@ -285,7 +419,6 @@ curl http://localhost:3000/health/details
 | Documento                                            | Descrição                            |
 | ---------------------------------------------------- | ------------------------------------ |
 | [docs/AWS_ARCHITECTURE.md](docs/AWS_ARCHITECTURE.md) | Arquitetura proposta para deploy AWS |
-| [legacy-api/README.md](legacy-api/README.md)         | Documentação da API legada mock      |
 
 ---
 
@@ -310,7 +443,60 @@ curl http://localhost:3000/health/details
 - [x] Rate limiting
 - [x] Health check com detalhes
 - [x] Métricas de performance
-- [ ] Testes automatizados (pendente)
+- [x] **294 testes** com **94%+ de cobertura**
+
+---
+
+## Troubleshooting
+
+### Sync travada (status RUNNING por muito tempo)
+
+```bash
+# Verificar status
+curl http://localhost:3000/sync/status
+
+# Resetar sync travada (marca como FAILED e permite nova execução)
+curl -X POST http://localhost:3000/sync/reset
+```
+
+### Redis não conecta
+
+```bash
+# Verificar se Redis está rodando
+docker ps | grep redis
+
+# Testar conexão
+redis-cli -h localhost -p 6379 ping
+```
+
+### Erro "Too Many Requests" (429)
+
+O rate limiting está ativo. Aguarde ou ajuste as variáveis:
+
+```bash
+RATE_LIMIT_TTL=60    # Janela em segundos
+RATE_LIMIT_MAX=100   # Máximo de requests por janela
+```
+
+### Logs não aparecem
+
+Verifique o nível de log configurado:
+
+```bash
+LOG_LEVEL=debug  # trace, debug, info, warn, error
+```
+
+### Health check retorna "unhealthy"
+
+```bash
+# Verificar detalhes
+curl http://localhost:3000/health
+
+# Possíveis causas:
+# - Redis desconectado
+# - Database inacessível
+# - API legada indisponível (status "degraded" é aceitável)
+```
 
 ---
 

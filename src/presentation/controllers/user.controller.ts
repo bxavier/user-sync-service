@@ -12,7 +12,6 @@ import {
   Query,
   Res,
 } from '@nestjs/common';
-import type { FastifyReply } from 'fastify';
 import {
   ApiConflictResponse,
   ApiCreatedResponse,
@@ -24,15 +23,16 @@ import {
   ApiProduces,
   ApiTags,
 } from '@nestjs/swagger';
-import { UserService } from '../../application/services';
+import type { FastifyReply } from 'fastify';
 import {
   CreateUserDto,
-  UpdateUserDto,
-  PaginationDto,
-  UserResponseDto,
-  PaginatedUsersResponseDto,
   ExportCsvQueryDto,
-} from '../../application/dtos';
+  PaginatedUsersResponseDto,
+  PaginationDto,
+  UpdateUserDto,
+  UserResponseDto,
+} from '@/application/dtos';
+import { UserService } from '@/application/services';
 
 @Controller('users')
 @ApiTags('users')
@@ -41,32 +41,27 @@ export class UserController {
 
   @Get()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Lista usuários com paginação' })
+  @ApiOperation({ summary: 'List users with pagination' })
   @ApiOkResponse({
-    description: 'Lista de usuários retornada com sucesso',
+    description: 'User list returned successfully',
     type: PaginatedUsersResponseDto,
   })
-  async findAll(
-    @Query() query: PaginationDto,
-  ): Promise<PaginatedUsersResponseDto> {
+  async findAll(@Query() query: PaginationDto): Promise<PaginatedUsersResponseDto> {
     return this.userService.findAll(query);
   }
 
   @Get('export/csv')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Exporta usuários em formato CSV' })
+  @ApiOperation({ summary: 'Export users in CSV format' })
   @ApiProduces('text/csv')
   @ApiOkResponse({
-    description: 'Arquivo CSV com usuários',
+    description: 'CSV file with users',
     schema: {
       type: 'string',
       format: 'binary',
     },
   })
-  async exportCsv(
-    @Query() query: ExportCsvQueryDto,
-    @Res() reply: FastifyReply,
-  ): Promise<void> {
+  async exportCsv(@Query() query: ExportCsvQueryDto, @Res() reply: FastifyReply): Promise<void> {
     reply.raw.writeHead(200, {
       'Content-Type': 'text/csv',
       'Content-Disposition': `attachment; filename="users-${Date.now()}.csv"`,
@@ -82,58 +77,53 @@ export class UserController {
 
   @Get(':user_name')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Busca usuário por userName' })
+  @ApiOperation({ summary: 'Find user by userName' })
   @ApiParam({
     name: 'user_name',
-    description: 'Nome de usuário',
+    description: 'User name',
     example: 'john_doe',
   })
   @ApiOkResponse({
-    description: 'Usuário encontrado',
+    description: 'User found',
     type: UserResponseDto,
   })
-  @ApiNotFoundResponse({ description: 'Usuário não encontrado' })
-  async findByUserName(
-    @Param('user_name') userName: string,
-  ): Promise<UserResponseDto> {
+  @ApiNotFoundResponse({ description: 'User not found' })
+  async findByUserName(@Param('user_name') userName: string): Promise<UserResponseDto> {
     return this.userService.findByUserName(userName);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Cadastra novo usuário' })
+  @ApiOperation({ summary: 'Create new user' })
   @ApiCreatedResponse({
-    description: 'Usuário criado com sucesso',
+    description: 'User created successfully',
     type: UserResponseDto,
   })
-  @ApiConflictResponse({ description: 'userName já está em uso' })
+  @ApiConflictResponse({ description: 'userName is already in use' })
   async create(@Body() dto: CreateUserDto): Promise<UserResponseDto> {
     return this.userService.create(dto);
   }
 
   @Put(':id')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Atualiza usuário' })
-  @ApiParam({ name: 'id', description: 'ID do usuário', example: 1 })
+  @ApiOperation({ summary: 'Update user' })
+  @ApiParam({ name: 'id', description: 'User ID', example: 1 })
   @ApiOkResponse({
-    description: 'Usuário atualizado com sucesso',
+    description: 'User updated successfully',
     type: UserResponseDto,
   })
-  @ApiNotFoundResponse({ description: 'Usuário não encontrado' })
-  @ApiConflictResponse({ description: 'userName já está em uso' })
-  async update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateUserDto,
-  ): Promise<UserResponseDto> {
+  @ApiNotFoundResponse({ description: 'User not found' })
+  @ApiConflictResponse({ description: 'userName is already in use' })
+  async update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateUserDto): Promise<UserResponseDto> {
     return this.userService.update(id, dto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Remove usuário (soft delete)' })
-  @ApiParam({ name: 'id', description: 'ID do usuário', example: 1 })
-  @ApiNoContentResponse({ description: 'Usuário removido com sucesso' })
-  @ApiNotFoundResponse({ description: 'Usuário não encontrado' })
+  @ApiOperation({ summary: 'Remove user (soft delete)' })
+  @ApiParam({ name: 'id', description: 'User ID', example: 1 })
+  @ApiNoContentResponse({ description: 'User removed successfully' })
+  @ApiNotFoundResponse({ description: 'User not found' })
   async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
     return this.userService.remove(id);
   }

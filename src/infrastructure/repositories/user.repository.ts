@@ -1,27 +1,32 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
-import { User } from '../../domain/models';
-import { UserEntity } from '../database/entities';
-import { UserMapper } from '../database/mappers';
+import { DataSource, Repository } from 'typeorm';
+import { User } from '@/domain/models';
 import {
-  UserRepository,
+  CreateUserData,
+  ExportFilters,
   FindAllOptions,
   FindAllResult,
-  CreateUserData,
   UpdateUserData,
   UpsertUserData,
-  ExportFilters,
-} from '../../domain/repositories/user.repository.interface';
+  UserRepository,
+} from '@/domain/repositories/user.repository.interface';
+import { UserEntity } from '@/infrastructure/database/entities';
+import { UserMapper } from '@/infrastructure/database/mappers';
 
+/**
+ * TypeORM implementation of UserRepository.
+ * All read operations filter out soft-deleted users by default.
+ */
 @Injectable()
-export class UserRepositoryImpl implements UserRepository {
+export class TypeOrmUserRepository implements UserRepository {
   constructor(
     @InjectRepository(UserEntity)
     private readonly repository: Repository<UserEntity>,
     private readonly dataSource: DataSource,
   ) {}
 
+  /** Returns paginated users with total count. */
   async findAll(options: FindAllOptions = {}): Promise<FindAllResult> {
     const { page = 1, limit = 10, includeDeleted = false } = options;
     const skip = (page - 1) * limit;
@@ -41,6 +46,7 @@ export class UserRepositoryImpl implements UserRepository {
     };
   }
 
+  /** Finds user by internal ID (excludes deleted). */
   async findById(id: number): Promise<User | null> {
     const entity = await this.repository.findOne({
       where: { id, deleted: false },
@@ -49,6 +55,7 @@ export class UserRepositoryImpl implements UserRepository {
     return entity ? UserMapper.toDomain(entity) : null;
   }
 
+  /** Finds user by userName (excludes deleted). */
   async findByUserName(userName: string): Promise<User | null> {
     const entity = await this.repository.findOne({
       where: { userName, deleted: false },
@@ -57,6 +64,7 @@ export class UserRepositoryImpl implements UserRepository {
     return entity ? UserMapper.toDomain(entity) : null;
   }
 
+  /** Creates a new user. */
   async create(data: CreateUserData): Promise<User> {
     const entity = this.repository.create({
       userName: data.userName,
@@ -70,6 +78,7 @@ export class UserRepositoryImpl implements UserRepository {
     return UserMapper.toDomain(savedEntity);
   }
 
+  /** Updates user fields. Returns null if not found. */
   async update(id: number, data: UpdateUserData): Promise<User | null> {
     const entity = await this.repository.findOne({
       where: { id, deleted: false },
@@ -79,17 +88,14 @@ export class UserRepositoryImpl implements UserRepository {
       return null;
     }
 
-    if (data.userName !== undefined) {
-      entity.userName = data.userName;
-    }
-    if (data.email !== undefined) {
-      entity.email = data.email;
-    }
+    entity.userName = data.userName ?? entity.userName;
+    entity.email = data.email ?? entity.email;
 
     const savedEntity = await this.repository.save(entity);
     return UserMapper.toDomain(savedEntity);
   }
 
+  /** Soft deletes a user (sets deleted=true). */
   async softDelete(id: number): Promise<boolean> {
     const entity = await this.repository.findOne({
       where: { id, deleted: false },
@@ -106,13 +112,14 @@ export class UserRepositoryImpl implements UserRepository {
     return true;
   }
 
+  /** Upserts by legacyId. Only updates if legacy record is newer. */
   async upsertByLegacyId(data: UpsertUserData): Promise<User> {
     const existing = await this.repository.findOne({
       where: { legacyId: data.legacyId },
     });
 
     if (existing) {
-      // Atualiza apenas se o registro do legado for mais recente
+      // Update only if legacy record is more recent
       if (data.legacyCreatedAt > (existing.legacyCreatedAt ?? new Date(0))) {
         existing.userName = data.userName;
         existing.email = data.email;
@@ -140,10 +147,11 @@ export class UserRepositoryImpl implements UserRepository {
     return UserMapper.toDomain(savedEntity);
   }
 
+  /** Bulk upserts by userName using raw SQL. Chunks data for SQLite limits. */
   async bulkUpsertByUserName(data: UpsertUserData[]): Promise<number> {
     if (data.length === 0) return 0;
 
-    // SQLite SQLITE_MAX_VARIABLE_NUMBER default = 999, com 8 campos = 124 max
+    // SQLite SQLITE_MAX_VARIABLE_NUMBER default = 999, with 8 fields = 124 max
     const CHUNK_SIZE = 124;
 
     for (let i = 0; i < data.length; i += CHUNK_SIZE) {
@@ -153,6 +161,7 @@ export class UserRepositoryImpl implements UserRepository {
     return data.length;
   }
 
+  /** @internal Upserts a single chunk using raw SQL. */
   private async upsertChunk(chunk: UpsertUserData[]): Promise<void> {
     const values: unknown[] = [];
     const placeholders: string[] = [];
@@ -189,9 +198,8 @@ export class UserRepositoryImpl implements UserRepository {
     await this.dataSource.query(sql, values);
   }
 
-  async *findAllForExport(
-    filters: ExportFilters = {},
-  ): AsyncGenerator<User, void, unknown> {
+  /** Streams users for export using cursor-based pagination. */
+  async *findAllForExport(filters: ExportFilters = {}): AsyncGenerator<User, void, unknown> {
     const batchSize = 1000;
     let lastId = 0;
 
@@ -213,10 +221,7 @@ export class UserRepositoryImpl implements UserRepository {
         });
       }
 
-      const batch = await qb
-        .orderBy('user.id', 'ASC')
-        .take(batchSize)
-        .getMany();
+      const batch = await qb.orderBy('user.id', 'ASC').take(batchSize).getMany();
 
       if (batch.length === 0) {
         break;

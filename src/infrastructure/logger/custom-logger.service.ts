@@ -1,7 +1,7 @@
 import { ConsoleLogger, Injectable } from '@nestjs/common';
 
 export interface LogMetadata {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 @Injectable()
@@ -10,7 +10,7 @@ export class LoggerService extends ConsoleLogger {
     super(context);
   }
 
-  log(message: any, ...optionalParams: any[]) {
+  log(message: string, ...optionalParams: unknown[]) {
     const formatted = this.formatWithMethod(message, optionalParams);
     if (formatted.context) {
       super.log(formatted.message, formatted.context);
@@ -19,7 +19,7 @@ export class LoggerService extends ConsoleLogger {
     }
   }
 
-  error(message: any, ...optionalParams: any[]) {
+  error(message: string, ...optionalParams: unknown[]) {
     const formatted = this.formatWithMethod(message, optionalParams);
     if (formatted.stack) {
       super.error(formatted.message, formatted.stack, formatted.context);
@@ -30,7 +30,7 @@ export class LoggerService extends ConsoleLogger {
     }
   }
 
-  warn(message: any, ...optionalParams: any[]) {
+  warn(message: string, ...optionalParams: unknown[]) {
     const formatted = this.formatWithMethod(message, optionalParams);
     if (formatted.context) {
       super.warn(formatted.message, formatted.context);
@@ -39,7 +39,7 @@ export class LoggerService extends ConsoleLogger {
     }
   }
 
-  debug(message: any, ...optionalParams: any[]) {
+  debug(message: string, ...optionalParams: unknown[]) {
     const formatted = this.formatWithMethod(message, optionalParams);
     if (formatted.context) {
       super.debug(formatted.message, formatted.context);
@@ -48,7 +48,7 @@ export class LoggerService extends ConsoleLogger {
     }
   }
 
-  verbose(message: any, ...optionalParams: any[]) {
+  verbose(message: string, ...optionalParams: unknown[]) {
     const formatted = this.formatWithMethod(message, optionalParams);
     if (formatted.context) {
       super.verbose(formatted.message, formatted.context);
@@ -58,8 +58,8 @@ export class LoggerService extends ConsoleLogger {
   }
 
   private formatWithMethod(
-    message: any,
-    optionalParams: any[],
+    message: string,
+    optionalParams: unknown[],
   ): { message: string; context?: string; stack?: string } {
     const parts: string[] = [];
 

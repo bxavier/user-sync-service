@@ -1,38 +1,38 @@
 /**
- * Token de injeção para o serviço de logger.
- * Usado para inversão de dependência (DIP).
+ * Injection token for the logger service.
+ * Used for dependency inversion (DIP).
  */
 export const LOGGER_SERVICE = Symbol('LOGGER_SERVICE');
 
 /**
- * Contexto adicional para logs estruturados.
+ * Additional context for structured logs.
  */
 export interface LogContext {
   [key: string]: unknown;
 }
 
 /**
- * Interface para o serviço de logging.
- * Permite injeção de dependência e substituição em testes.
+ * Interface for the logging service.
+ * Allows dependency injection and substitution in tests.
  */
 export interface ILogger {
   /**
-   * Registra uma mensagem de log informativa.
+   * Logs an informational message.
    */
   log(message: string, context?: LogContext): void;
 
   /**
-   * Registra uma mensagem de aviso.
+   * Logs a warning message.
    */
   warn(message: string, context?: LogContext): void;
 
   /**
-   * Registra uma mensagem de erro.
+   * Logs an error message.
    */
   error(message: string, context?: LogContext): void;
 
   /**
-   * Registra uma mensagem de debug.
+   * Logs a debug message.
    */
   debug(message: string, context?: LogContext): void;
 }

@@ -1,23 +1,8 @@
-import {
-  Controller,
-  Post,
-  Get,
-  HttpCode,
-  HttpStatus,
-  NotFoundException,
-} from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import {
-  SyncService,
-  TriggerSyncResult,
-  ResetSyncResult,
-} from '../../application/services/sync.service';
-import { SyncLog } from '../../domain/models';
-import {
-  SyncStatusDto,
-  TriggerSyncResponseDto,
-  ResetSyncResponseDto,
-} from '../../application/dtos';
+import { Controller, Get, HttpCode, HttpStatus, NotFoundException, Post } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ResetSyncResponseDto, SyncStatusDto, TriggerSyncResponseDto } from '@/application/dtos';
+import { ResetSyncResult, SyncService, TriggerSyncResult } from '@/application/services/sync.service';
+import { SyncLog } from '@/domain/models';
 
 @Controller('sync')
 @ApiTags('sync')
@@ -26,10 +11,10 @@ export class SyncController {
 
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({ summary: 'Dispara sincronização com sistema legado' })
+  @ApiOperation({ summary: 'Triggers synchronization with legacy system' })
   @ApiResponse({
     status: HttpStatus.ACCEPTED,
-    description: 'Sincronização enfileirada',
+    description: 'Synchronization enqueued',
     type: TriggerSyncResponseDto,
   })
   async triggerSync(): Promise<TriggerSyncResult> {
@@ -38,21 +23,21 @@ export class SyncController {
 
   @Get('status')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Retorna status da última sincronização' })
+  @ApiOperation({ summary: 'Returns latest synchronization status' })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Status da última sincronização',
+    description: 'Latest synchronization status',
     type: SyncStatusDto,
   })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
-    description: 'Nenhuma sincronização encontrada',
+    description: 'No synchronization found',
   })
   async getStatus(): Promise<SyncStatusDto> {
     const status = await this.syncService.getLatestSyncStatus();
 
     if (!status) {
-      throw new NotFoundException('Nenhuma sincronização encontrada');
+      throw new NotFoundException('No synchronization found');
     }
 
     return status;
@@ -60,10 +45,10 @@ export class SyncController {
 
   @Get('history')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Retorna histórico de sincronizações' })
+  @ApiOperation({ summary: 'Returns synchronization history' })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Lista de sincronizações',
+    description: 'List of synchronizations',
     type: [SyncStatusDto],
   })
   async getHistory(): Promise<SyncLog[]> {
@@ -73,26 +58,24 @@ export class SyncController {
   @Post('reset')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Reseta sincronização travada',
+    summary: 'Resets stale synchronization',
     description:
-      'Força a sincronização atual (se estiver em PENDING, RUNNING ou PROCESSING) a ser marcada como FAILED. Use quando uma sync ficar travada.',
+      'Forces the current synchronization (if in PENDING, RUNNING or PROCESSING) to be marked as FAILED. Use when a sync gets stuck.',
   })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Sincronização resetada com sucesso',
+    description: 'Synchronization reset successfully',
     type: ResetSyncResponseDto,
   })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
-    description: 'Nenhuma sincronização em andamento para resetar',
+    description: 'No synchronization in progress to reset',
   })
   async resetSync(): Promise<ResetSyncResult> {
     const result = await this.syncService.resetCurrentSync();
 
     if (!result) {
-      throw new NotFoundException(
-        'Nenhuma sincronização em andamento para resetar',
-      );
+      throw new NotFoundException('No synchronization in progress to reset');
     }
 
     return result;

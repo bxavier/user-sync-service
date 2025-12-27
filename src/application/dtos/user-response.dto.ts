@@ -1,31 +1,31 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { User } from '../../domain/models';
+import { User } from '@/domain/models';
 
 export class UserResponseDto {
-  @ApiProperty({ description: 'ID do usuário', example: 1 })
+  @ApiProperty({ description: 'User ID', example: 1 })
   id: number;
 
-  @ApiProperty({ description: 'Nome de usuário', example: 'john_doe' })
+  @ApiProperty({ description: 'User name', example: 'john_doe' })
   userName: string;
 
-  @ApiProperty({ description: 'Email do usuário', example: 'john@example.com' })
+  @ApiProperty({ description: 'User email', example: 'john@example.com' })
   email: string;
 
   @ApiProperty({
-    description: 'Data de criação no sistema legado',
+    description: 'Creation date in legacy system',
     example: '2024-01-15T10:30:00.000Z',
     nullable: true,
   })
   legacyCreatedAt: Date | null;
 
   @ApiProperty({
-    description: 'Data de criação',
+    description: 'Creation date',
     example: '2024-01-15T10:30:00.000Z',
   })
   createdAt: Date;
 
   @ApiProperty({
-    description: 'Data de atualização',
+    description: 'Update date',
     example: '2024-01-15T10:30:00.000Z',
   })
   updatedAt: Date;
@@ -43,18 +43,18 @@ export class UserResponseDto {
 }
 
 export class PaginatedUsersResponseDto {
-  @ApiProperty({ type: [UserResponseDto], description: 'Lista de usuários' })
+  @ApiProperty({ type: [UserResponseDto], description: 'User list' })
   data: UserResponseDto[];
 
-  @ApiProperty({ description: 'Total de registros', example: 100 })
+  @ApiProperty({ description: 'Total records', example: 100 })
   total: number;
 
-  @ApiProperty({ description: 'Página atual', example: 1 })
+  @ApiProperty({ description: 'Current page', example: 1 })
   page: number;
 
-  @ApiProperty({ description: 'Itens por página', example: 10 })
+  @ApiProperty({ description: 'Items per page', example: 10 })
   limit: number;
 
-  @ApiProperty({ description: 'Total de páginas', example: 10 })
+  @ApiProperty({ description: 'Total pages', example: 10 })
   totalPages: number;
 }

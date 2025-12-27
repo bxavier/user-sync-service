@@ -1,16 +1,16 @@
-import { Injectable, Inject, OnModuleInit } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { SYNC_QUEUE_NAME, SYNC_JOB_NAME } from '../../infrastructure/queue';
-import type { SyncJobData } from '../../infrastructure/queue';
-import { SYNC_LOG_REPOSITORY } from '../../domain/repositories/sync-log.repository.interface';
-import type { SyncLogRepository } from '../../domain/repositories/sync-log.repository.interface';
-import { SyncLog, SyncStatus } from '../../domain/models';
-import { LOGGER_SERVICE } from '../../domain/services';
-import type { ILogger } from '../../domain/services';
-import type { SyncStatusDto } from '../dtos';
+import { Queue } from 'bullmq';
+import type { SyncStatusDto } from '@/application/dtos';
+import { SyncLog, SyncStatus } from '@/domain/models';
+import type { SyncLogRepository } from '@/domain/repositories/sync-log.repository.interface';
+import { SYNC_LOG_REPOSITORY } from '@/domain/repositories/sync-log.repository.interface';
+import type { ILogger } from '@/domain/services';
+import { LOGGER_SERVICE } from '@/domain/services';
+import type { SyncJobData } from '@/infrastructure/queue';
+import { SYNC_JOB_NAME, SYNC_QUEUE_NAME } from '@/infrastructure/queue';
 
 export interface TriggerSyncResult {
   syncLogId: number | undefined;
@@ -24,6 +24,10 @@ export interface ResetSyncResult {
   message: string;
 }
 
+/**
+ * Service for synchronization with the legacy system.
+ * Handles triggering, monitoring, history, and automatic recovery of syncs.
+ */
 @Injectable()
 export class SyncService implements OnModuleInit {
   constructor(
@@ -52,32 +56,33 @@ export class SyncService implements OnModuleInit {
     return this.configService.get<number>('SYNC_ESTIMATED_TOTAL_RECORDS', 1_000_000);
   }
 
-  /**
-   * Recovery no startup: marca syncs órfãs como FAILED
-   * (Se a aplicação reiniciou, qualquer sync em andamento foi interrompida)
-   */
+  /** Marks orphan syncs as FAILED on application startup. */
   async onModuleInit(): Promise<void> {
     const orphanedCount = await this.syncLogRepository.markStaleAsFailed(
-      0, // Qualquer sync em andamento é considerada órfã no startup
-      'Sync interrompida: aplicação reiniciada',
+      0, // Any sync in progress is considered orphan on startup
+      'Sync interrupted: application restarted',
     );
 
     if (orphanedCount > 0) {
-      this.logger.warn('Syncs órfãs marcadas como FAILED no startup', {
+      this.logger.warn('Orphan syncs marked as FAILED on startup', {
         count: orphanedCount,
       });
     }
   }
 
+  /**
+   * Triggers a new sync (idempotent - won't start if already running).
+   * Automatically marks stale syncs as FAILED before checking.
+   */
   async triggerSync(): Promise<TriggerSyncResult> {
-    // Primeiro, verifica e marca syncs travadas como FAILED (timeout automático)
+    // First, check and mark stale syncs as FAILED (automatic timeout)
     const staleCount = await this.syncLogRepository.markStaleAsFailed(
       this.staleSyncThresholdMinutes,
-      `Sync travada: timeout após ${this.staleSyncThresholdMinutes} minutos`,
+      `Sync stale: timeout after ${this.staleSyncThresholdMinutes} minutes`,
     );
 
     if (staleCount > 0) {
-      this.logger.warn('Syncs travadas marcadas como FAILED', {
+      this.logger.warn('Stale syncs marked as FAILED', {
         count: staleCount,
         thresholdMinutes: this.staleSyncThresholdMinutes,
       });
@@ -86,14 +91,14 @@ export class SyncService implements OnModuleInit {
     const latestSync = await this.syncLogRepository.findLatest();
 
     if (SyncLog.isInProgress(latestSync)) {
-      this.logger.log('Sincronização já em andamento', {
+      this.logger.log('Sync already in progress', {
         syncLogId: latestSync!.id,
         status: latestSync!.status,
       });
 
       return {
         syncLogId: latestSync!.id,
-        message: 'Sincronização já em andamento',
+        message: 'Sync already in progress',
         alreadyRunning: true,
       };
     }
@@ -102,7 +107,7 @@ export class SyncService implements OnModuleInit {
       status: SyncStatus.PENDING,
     });
 
-    this.logger.log('Enfileirando job de sincronização', {
+    this.logger.log('Enqueueing sync job', {
       syncLogId: syncLog.id,
     });
 
@@ -117,15 +122,17 @@ export class SyncService implements OnModuleInit {
 
     return {
       syncLogId: syncLog.id!,
-      message: 'Sincronização iniciada',
+      message: 'Sync started',
       alreadyRunning: false,
     };
   }
 
+  /** Returns the most recent sync log, or null if none exist. */
   async getLatestSync(): Promise<SyncLog | null> {
     return this.syncLogRepository.findLatest();
   }
 
+  /** Returns detailed status with computed metrics (progress, throughput, ETA). */
   async getLatestSyncStatus(): Promise<SyncStatusDto | null> {
     const syncLog = await this.syncLogRepository.findLatest();
     if (!syncLog) return null;
@@ -136,19 +143,12 @@ export class SyncService implements OnModuleInit {
     const elapsedSeconds = elapsedMs / 1000;
 
     const recordsPerSecond =
-      elapsedSeconds > 0
-        ? Math.round((syncLog.totalProcessed / elapsedSeconds) * 10) / 10
-        : null;
+      elapsedSeconds > 0 ? Math.round((syncLog.totalProcessed / elapsedSeconds) * 10) / 10 : null;
 
     const progressPercent =
       syncLog.status === SyncStatus.COMPLETED
         ? 100
-        : Math.min(
-            Math.round(
-              (syncLog.totalProcessed / this.estimatedTotalRecords) * 1000,
-            ) / 10,
-            99.9,
-          );
+        : Math.min(Math.round((syncLog.totalProcessed / this.estimatedTotalRecords) * 1000) / 10, 99.9);
 
     let estimatedTimeRemaining: string | null = null;
     if (
@@ -179,25 +179,26 @@ export class SyncService implements OnModuleInit {
     };
   }
 
+  /** Formats milliseconds to human-readable string (e.g., "5m 30s"). */
   private formatDuration(ms: number): string {
     const mins = Math.floor(ms / 60000);
     const secs = Math.floor((ms % 60000) / 1000);
     return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
   }
 
+  /** Returns sync history, ordered by most recent first. */
   async getSyncHistory(limit: number = 10): Promise<SyncLog[]> {
     return this.syncLogRepository.findAll(limit);
   }
 
-  @Cron(CronExpression.EVERY_6_HOURS) // A cada 6 horas
+  /** Scheduled sync - runs every 6 hours via cron. */
+  @Cron(CronExpression.EVERY_6_HOURS)
   async handleScheduledSync(): Promise<void> {
-    this.logger.log('Executando sincronização agendada');
+    this.logger.log('Running scheduled sync');
     await this.triggerSync();
   }
 
-  /**
-   * Reset manual: força a sync atual (se travada) a ser marcada como FAILED
-   */
+  /** Manually cancels a stuck sync, marking it as FAILED. */
   async resetCurrentSync(): Promise<ResetSyncResult | null> {
     const latestSync = await this.syncLogRepository.findLatest();
 
@@ -205,7 +206,7 @@ export class SyncService implements OnModuleInit {
       return null;
     }
 
-    // Só permite reset de syncs em andamento
+    // Only allows reset of syncs in progress
     if (!SyncLog.isInProgress(latestSync)) {
       return null;
     }
@@ -215,10 +216,10 @@ export class SyncService implements OnModuleInit {
     await this.syncLogRepository.update(latestSync.id!, {
       status: SyncStatus.FAILED,
       finishedAt: new Date(),
-      errorMessage: 'Sync cancelada manualmente via API',
+      errorMessage: 'Sync manually cancelled via API',
     });
 
-    this.logger.warn('Sync resetada manualmente', {
+    this.logger.warn('Sync manually reset', {
       syncLogId: latestSync.id!,
       previousStatus,
     });
@@ -226,7 +227,7 @@ export class SyncService implements OnModuleInit {
     return {
       syncLogId: latestSync.id!,
       previousStatus,
-      message: 'Sincronização resetada com sucesso',
+      message: 'Sync reset successfully',
     };
   }
 }

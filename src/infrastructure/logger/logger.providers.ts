@@ -1,13 +1,13 @@
 import { Provider, Scope } from '@nestjs/common';
-import { LOGGER_SERVICE } from '../../domain/services';
+import { LOGGER_SERVICE } from '@/domain/services';
 import { LoggerService } from './custom-logger.service';
 
 /**
- * Providers para injeção de dependência do serviço de logger.
- * Mapeia o token LOGGER_SERVICE para a implementação concreta.
+ * Providers for logger service dependency injection.
+ * Maps the LOGGER_SERVICE token to the concrete implementation.
  *
- * Usa Scope.TRANSIENT para criar nova instância por injeção,
- * permitindo contexto diferente por service.
+ * Uses Scope.TRANSIENT to create a new instance per injection,
+ * allowing different context per service.
  */
 export const loggerProviders: Provider[] = [
   {

@@ -1,24 +1,19 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { BullModule } from '@nestjs/bullmq';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { join } from 'path';
-import { validate, EnvironmentVariables } from './infrastructure/config';
+import { HealthService, SyncService, UserService } from './application/services';
+import { EnvironmentVariables, validate } from './infrastructure/config';
+import { SyncLogEntity, UserEntity } from './infrastructure/database/entities';
 import { TypeOrmLogger } from './infrastructure/database/typeorm-logger';
-import { UserEntity, SyncLogEntity } from './infrastructure/database/entities';
-import { repositoriesProviders } from './infrastructure/repositories';
 import { legacyApiProviders } from './infrastructure/legacy/legacy-api.providers';
 import { loggerProviders } from './infrastructure/logger/logger.providers';
-import { UserController, SyncController, HealthController } from './presentation/controllers';
-import { UserService, SyncService, HealthService } from './application/services';
-import {
-  SYNC_QUEUE_NAME,
-  SYNC_BATCH_QUEUE_NAME,
-  SyncProcessor,
-  SyncBatchProcessor,
-} from './infrastructure/queue';
+import { SYNC_BATCH_QUEUE_NAME, SYNC_QUEUE_NAME, SyncBatchProcessor, SyncProcessor } from './infrastructure/queue';
+import { repositoriesProviders } from './infrastructure/repositories';
+import { HealthController, SyncController, UserController } from './presentation/controllers';
 
 @Module({
   imports: [
@@ -34,11 +29,8 @@ import {
         return {
           type: 'better-sqlite3',
           database: configService.get('DATABASE_PATH'),
-          entities: [
-            join(__dirname, 'infrastructure', 'database', 'entities', '*.orm-entity.{ts,js}'),
-          ],
-          synchronize:
-            configService.get('NODE_ENV') !== 'production',
+          entities: [join(__dirname, 'infrastructure', 'database', 'entities', '*.orm-entity.{ts,js}')],
+          synchronize: configService.get('NODE_ENV') !== 'production',
           logging: loggingEnabled,
           logger: loggingEnabled ? new TypeOrmLogger() : undefined,
         };
@@ -54,10 +46,7 @@ import {
         },
       }),
     }),
-    BullModule.registerQueue(
-      { name: SYNC_QUEUE_NAME },
-      { name: SYNC_BATCH_QUEUE_NAME },
-    ),
+    BullModule.registerQueue({ name: SYNC_QUEUE_NAME }, { name: SYNC_BATCH_QUEUE_NAME }),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],

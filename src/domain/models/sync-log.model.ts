@@ -1,3 +1,4 @@
+/** Sync status: PENDING → RUNNING → PROCESSING → COMPLETED/FAILED */
 export enum SyncStatus {
   PENDING = 'pending',
   RUNNING = 'running',
@@ -6,12 +7,10 @@ export enum SyncStatus {
   FAILED = 'failed',
 }
 
-const IN_PROGRESS_STATUSES = [
-  SyncStatus.PENDING,
-  SyncStatus.RUNNING,
-  SyncStatus.PROCESSING,
-];
+/** Statuses that indicate sync is still active */
+const IN_PROGRESS_STATUSES = [SyncStatus.PENDING, SyncStatus.RUNNING, SyncStatus.PROCESSING];
 
+/** Properties for SyncLog domain model. */
 export interface SyncLogProps {
   id?: number;
   status: SyncStatus;
@@ -22,15 +21,15 @@ export interface SyncLogProps {
   durationMs: number | null;
 }
 
-/**
- * Modelo de domínio puro para SyncLog.
- * Não contém decoradores de ORM - representa apenas a lógica de negócio.
- */
+/** Pure domain model for sync operation log (no ORM dependencies). */
 export class SyncLog {
+  /** @param props - SyncLog properties (immutable after construction) */
   constructor(private readonly props: SyncLogProps) {}
 
   /**
-   * Verifica se uma sync está em andamento (PENDING, RUNNING ou PROCESSING)
+   * Checks if sync is currently in progress (for idempotency).
+   * @param sync - Sync log to check (can be null)
+   * @returns true if sync is active (PENDING, RUNNING, or PROCESSING)
    */
   static isInProgress(sync: SyncLog | null): boolean {
     return sync !== null && IN_PROGRESS_STATUSES.includes(sync.status);
@@ -64,6 +63,10 @@ export class SyncLog {
     return this.props.durationMs;
   }
 
+  /**
+   * Converts to plain object for serialization.
+   * @returns Shallow copy of sync log properties
+   */
   toPlainObject(): SyncLogProps {
     return { ...this.props };
   }

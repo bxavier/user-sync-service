@@ -1,3 +1,4 @@
+/** Properties for User domain model. */
 export interface UserProps {
   id?: number;
   legacyId: number | null;
@@ -11,10 +12,11 @@ export interface UserProps {
 }
 
 /**
- * Modelo de domínio puro para User.
- * Não contém decoradores de ORM - representa apenas a lógica de negócio.
+ * Pure domain model for User (no ORM dependencies).
+ * Key: userName (unique), legacyId (sync tracking), deleted (soft delete).
  */
 export class User {
+  /** @param props - User properties (immutable after construction) */
   constructor(private readonly props: UserProps) {}
 
   get id(): number | undefined {
@@ -53,6 +55,10 @@ export class User {
     return this.props.deletedAt;
   }
 
+  /**
+   * Converts to plain object for serialization.
+   * @returns Shallow copy of user properties
+   */
   toPlainObject(): UserProps {
     return { ...this.props };
   }

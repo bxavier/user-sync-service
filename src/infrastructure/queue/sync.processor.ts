@@ -1,28 +1,27 @@
-import { Processor, WorkerHost, InjectQueue } from '@nestjs/bullmq';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job, Queue } from 'bullmq';
+import { SyncLog, SyncStatus } from '@/domain/models';
+import type { SyncLogRepository } from '@/domain/repositories/sync-log.repository.interface';
+import { SYNC_LOG_REPOSITORY } from '@/domain/repositories/sync-log.repository.interface';
+import type { ILegacyApiClient, ILogger, LegacyUser } from '@/domain/services';
+import { LEGACY_API_CLIENT, LOGGER_SERVICE } from '@/domain/services';
+import type { SyncBatchJobData } from './sync-batch.processor';
 import {
-  SYNC_QUEUE_NAME,
-  SYNC_BATCH_QUEUE_NAME,
   SYNC_BATCH_JOB_NAME,
+  SYNC_BATCH_QUEUE_NAME,
   SYNC_JOB_NAME,
+  SYNC_QUEUE_NAME,
   SYNC_RETRY_DELAY_MS,
 } from './sync.constants';
-import { SYNC_LOG_REPOSITORY } from '../../domain/repositories/sync-log.repository.interface';
-import type { SyncLogRepository } from '../../domain/repositories/sync-log.repository.interface';
-import { SyncLog, SyncStatus } from '../../domain/models';
-import {
-  LEGACY_API_CLIENT,
-  LOGGER_SERVICE,
-} from '../../domain/services';
-import type { ILegacyApiClient, LegacyUser, ILogger } from '../../domain/services';
-import type { SyncBatchJobData } from './sync-batch.processor';
 
+/** Data passed to the sync orchestrator job */
 export interface SyncJobData {
   syncLogId: number;
 }
 
+/** Result returned by the sync orchestrator job */
 export interface SyncJobResult {
   syncLogId: number;
   totalBatches: number;
@@ -31,6 +30,10 @@ export interface SyncJobResult {
   durationMs: number;
 }
 
+/**
+ * Sync orchestrator - streams from legacy API and enqueues batch jobs.
+ * Coordinates work across multiple batch workers.
+ */
 @Processor(SYNC_QUEUE_NAME)
 export class SyncProcessor extends WorkerHost {
   private readonly batchSize: number;
@@ -52,6 +55,7 @@ export class SyncProcessor extends WorkerHost {
     this.batchSize = this.configService.get<number>('SYNC_BATCH_SIZE', 1000);
   }
 
+  /** Main job processor - orchestrates streaming and batch enqueueing. */
   async process(job: Job<SyncJobData>): Promise<SyncJobResult> {
     const { syncLogId } = job.data;
     const startTime = Date.now();
@@ -60,7 +64,7 @@ export class SyncProcessor extends WorkerHost {
     let currentBatch: LegacyUser[] = [];
     let lastProgressUpdate = Date.now();
 
-    this.logger.log('Iniciando job de sincronização (orquestrador)', {
+    this.logger.log('Starting sync job (orchestrator)', {
       syncLogId,
       jobId: job.id,
       batchSize: this.batchSize,
@@ -81,7 +85,7 @@ export class SyncProcessor extends WorkerHost {
             batchNumber++;
             currentBatch = [];
 
-            // Atualiza progresso a cada 10 segundos
+            // Updates progress every 10 seconds
             const now = Date.now();
             if (now - lastProgressUpdate > 10000) {
               await this.syncLogRepository.update(syncLogId, {
@@ -94,10 +98,10 @@ export class SyncProcessor extends WorkerHost {
         }
       };
 
-      // Executa streaming com enfileiramento de batches
+      // Execute streaming with batch enqueueing
       await this.legacyApiClient.fetchUsersStreaming(onBatch);
 
-      // Enfileira o último batch (se houver registros restantes)
+      // Enqueue the last batch (if there are remaining records)
       if (currentBatch.length > 0) {
         totalEnqueued += currentBatch.length;
         await this.enqueueBatch(syncLogId, batchNumber, currentBatch, totalEnqueued);
@@ -106,14 +110,14 @@ export class SyncProcessor extends WorkerHost {
 
       const durationMs = Date.now() - startTime;
 
-      // Marca como PROCESSING - os batches ainda estão sendo processados
+      // Marks as PROCESSING - batches are still being processed
       await this.syncLogRepository.update(syncLogId, {
         status: SyncStatus.PROCESSING,
         totalProcessed: totalEnqueued,
         durationMs,
       });
 
-      this.logger.log('Streaming concluído, batches enfileirados', {
+      this.logger.log('Streaming completed, batches enqueued', {
         syncLogId,
         totalBatches: batchNumber,
         totalEnqueued,
@@ -129,10 +133,9 @@ export class SyncProcessor extends WorkerHost {
       };
     } catch (error) {
       const durationMs = Date.now() - startTime;
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-      this.logger.error('Erro no streaming', {
+      this.logger.error('Streaming error', {
         syncLogId,
         error: errorMessage,
         totalEnqueued,
@@ -147,14 +150,11 @@ export class SyncProcessor extends WorkerHost {
         durationMs,
       });
 
-      // Agenda retry em background
+      // Schedule retry in background
       this.scheduleRetry(syncLogId, errorMessage).catch((retryError) => {
-        this.logger.warn('Falha ao agendar retry', {
+        this.logger.warn('Failed to schedule retry', {
           syncLogId,
-          error:
-            retryError instanceof Error
-              ? retryError.message
-              : 'Unknown error',
+          error: retryError instanceof Error ? retryError.message : 'Unknown error',
         });
       });
 
@@ -162,13 +162,14 @@ export class SyncProcessor extends WorkerHost {
     }
   }
 
+  /** Enqueues a batch of users for processing by batch workers. */
   private async enqueueBatch(
     syncLogId: number,
     batchNumber: number,
     users: LegacyUser[],
     totalEnqueued: number,
   ): Promise<void> {
-    this.logger.log('Batch enfileirado', {
+    this.logger.log('Batch enqueued', {
       syncLogId,
       batchNumber,
       usersInBatch: users.length,
@@ -187,30 +188,28 @@ export class SyncProcessor extends WorkerHost {
     );
   }
 
-  private async scheduleRetry(
-    syncLogId: number,
-    reason: string,
-  ): Promise<void> {
-    // Verifica se já existe retry pendente (evita duplicatas)
+  /** Schedules a retry sync after failure (prevents duplicates). */
+  private async scheduleRetry(syncLogId: number, reason: string): Promise<void> {
+    // Checks if retry is already pending (avoid duplicates)
     const delayed = await this.syncQueue.getDelayed();
     if (delayed.length > 0) {
-      this.logger.log('Retry já agendado, ignorando nova solicitação', {
+      this.logger.log('Retry already scheduled, ignoring request', {
         syncLogId,
         existingJobId: delayed[0].id,
       });
       return;
     }
 
-    // Verifica se já existe sync em andamento
+    // Checks if sync is already in progress
     const latestSync = await this.syncLogRepository.findLatest();
     if (SyncLog.isInProgress(latestSync)) {
-      this.logger.log('Retry ignorado: sync já em andamento', {
+      this.logger.log('Retry ignored: sync already in progress', {
         currentSyncLogId: latestSync!.id,
       });
       return;
     }
 
-    // Cria novo sync log para o retry
+    // Creates new sync log for retry
     const newSyncLog = await this.syncLogRepository.create({
       status: SyncStatus.PENDING,
     });
@@ -225,7 +224,7 @@ export class SyncProcessor extends WorkerHost {
       },
     );
 
-    this.logger.log('Retry agendado', {
+    this.logger.log('Retry scheduled', {
       originalSyncLogId: syncLogId,
       newSyncLogId: newSyncLog.id!,
       reason,

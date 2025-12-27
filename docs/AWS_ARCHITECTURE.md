@@ -126,6 +126,15 @@ Todos os serviços escolhidos (ECS Fargate, SQS, Lambda, RDS) são gerenciados p
 
 ---
 
+## Alternativas Descartadas
+
+| Alternativa | Por que não funciona |
+|-------------|---------------------|
+| **Lambda** | Timeout 15 min < streaming 20 min |
+| **Step Functions** | Orquestra chamadas discretas. Sem paginação, não há como dividir em steps |
+
+---
+
 ## Mapeamento: Código Atual → AWS
 
 | Componente Local        | Serviço AWS      |
@@ -136,3 +145,31 @@ Todos os serviços escolhidos (ECS Fargate, SQS, Lambda, RDS) são gerenciados p
 | Cron (@Cron)            | EventBridge      |
 | SQLite                  | RDS PostgreSQL   |
 | NestJS (sync processor) | ECS Fargate Task |
+| NestJS Logger           | CloudWatch Logs  |
+
+---
+
+## Observabilidade na AWS
+
+### Logs
+
+ECS e Lambda enviam stdout automaticamente para CloudWatch Logs. O logger do NestJS pode ser configurado para output JSON estruturado em produção.
+
+### Métricas
+
+Duas opções recomendadas para métricas na AWS:
+
+| Opção | Esforço | Métricas |
+|-------|---------|----------|
+| **Container Insights** | Zero config | CPU, memória, rede (automático) |
+| **Embedded Metric Format** | Baixo | Logs estruturados → métricas automáticas |
+
+### Alertas Recomendados
+
+| Alerta | Métrica | Threshold |
+|--------|---------|-----------|
+| Sync falhou | CloudWatch Logs filter | Erros no SyncProcessor |
+| Fila crescendo | SQS `ApproximateNumberOfMessages` | > 10000 |
+| ECS Task falhou | ECS Task State Change | STOPPED com erro |
+
+Configurar via **CloudWatch Alarms** ou **EventBridge** para notificações SNS/Slack.

@@ -1,4 +1,4 @@
-import { SyncLog, SyncStatus } from '../models';
+import { SyncLog, SyncStatus } from '@/domain/models';
 
 export interface CreateSyncLogData {
   status?: SyncStatus;
@@ -21,14 +21,11 @@ export interface SyncLogRepository {
   findLatest(): Promise<SyncLog | null>;
   findAll(limit?: number): Promise<SyncLog[]>;
   /**
-   * Encontra syncs travadas (status PENDING/RUNNING/PROCESSING há mais de X minutos)
+   * Finds stale syncs (status PENDING/RUNNING/PROCESSING for more than X minutes)
    */
   findStaleSyncs(staleThresholdMinutes: number): Promise<SyncLog[]>;
   /**
-   * Marca syncs travadas como FAILED
+   * Marks stale syncs as FAILED
    */
-  markStaleAsFailed(
-    staleThresholdMinutes: number,
-    errorMessage: string,
-  ): Promise<number>;
+  markStaleAsFailed(staleThresholdMinutes: number, errorMessage: string): Promise<number>;
 }

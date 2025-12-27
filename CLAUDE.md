@@ -10,13 +10,14 @@ Serviço de integração que sincroniza dados de um sistema legado instável (~1
 
 ### Stack Tecnológica
 
-| Camada         | Tecnologia       |
-| -------------- | ---------------- |
-| Framework      | NestJS + Fastify |
-| Banco de Dados | SQLite + TypeORM |
-| Fila           | BullMQ + Redis   |
-| Validação      | class-validator  |
-| Documentação   | Swagger/OpenAPI  |
+| Camada          | Tecnologia                |
+| --------------- | ------------------------- |
+| Framework       | NestJS + Fastify          |
+| Banco de Dados  | SQLite + TypeORM          |
+| Fila            | BullMQ + Redis            |
+| Validação       | class-validator           |
+| Documentação    | Swagger/OpenAPI           |
+| Observabilidade | NestJS Logger             |
 
 ---
 
@@ -97,14 +98,14 @@ O domínio define interfaces abstratas que a infraestrutura implementa:
 │    └── SyncLogMapper        │ - toEntity(model): Entity            │
 ├────────────────────────────────────────────────────────────────────┤
 │  repositories/              │ Implementações dos repositórios      │
-│    ├── UserRepositoryImpl   │ - Usa TypeORM + Mappers              │
-│    └── SyncLogRepositoryImpl│ - Retorna modelos de domínio         │
+│    ├── TypeOrmUserRepository│ - Usa TypeORM + Mappers              │
+│    └── TypeOrmSyncLogRepo...│ - Retorna modelos de domínio         │
 ├────────────────────────────────────────────────────────────────────┤
 │  legacy/                    │ Cliente da API legada                │
-│    └── LegacyApiClientImpl  │ - Implementa ILegacyApiClient        │
+│    └── AxiosLegacyApiClient │ - Implementa ILegacyApiClient        │
 ├────────────────────────────────────────────────────────────────────┤
-│  logger/                    │ Logger customizado                   │
-│    └── LoggerService        │ - Implementa ILogger                 │
+│  logger/                    │ Logging                              │
+│    └── LoggerService        │ - Implementa ILogger (NestJS Logger) │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -167,10 +168,9 @@ O domínio define interfaces abstratas que a infraestrutura implementa:
 
 ### Health
 
-| Método | Endpoint        | Descrição              |
-| ------ | --------------- | ---------------------- |
-| GET    | /health         | Liveness probe         |
-| GET    | /health/details | Readiness com detalhes |
+| Método | Endpoint | Descrição      |
+| ------ | -------- | -------------- |
+| GET    | /health  | Liveness probe |
 
 ---
 
@@ -235,9 +235,11 @@ const circuitBreakerConfig = {
 | `SYNC_BATCH_CONCURRENCY`       | Não         | `5`                      | Workers paralelos (batch queue)   |
 | `SYNC_STALE_THRESHOLD_MINUTES` | Não         | `30`                     | Timeout para sync travada (min)   |
 | `SYNC_ESTIMATED_TOTAL_RECORDS` | Não         | `1000000`                | Estimativa de registros no legado |
-| `TYPEORM_LOGGING`              | Não         | `true`                   | Habilita logs do TypeORM          |
+| `TYPEORM_LOGGING`              | Não         | `false`                  | Habilita logs do TypeORM          |
 | `RATE_LIMIT_TTL`               | Não         | `60`                     | TTL do rate limit (segundos)      |
 | `RATE_LIMIT_MAX`               | Não         | `100`                    | Máximo de requests por TTL        |
+| `LOG_LEVEL`                    | Não         | `info`                   | Nível de log (trace/debug/info/warn/error) |
+| `SERVICE_NAME`                 | Não         | `user-sync-service`      | Nome do serviço nos logs          |
 
 ---
 
@@ -248,54 +250,84 @@ src/
 ├── app.module.ts                    # Módulo principal
 ├── main.ts                          # Bootstrap Fastify
 ├── domain/
-│   ├── models/                      # Modelos de domínio puros
+│   ├── models/
 │   │   ├── user.model.ts            # User (sem ORM)
-│   │   ├── sync-log.model.ts        # SyncLog + SyncStatus enum
+│   │   ├── user.model.spec.ts       # ← Testes colocados junto
+│   │   ├── sync-log.model.ts
+│   │   ├── sync-log.model.spec.ts
 │   │   └── index.ts
 │   ├── repositories/                # Interfaces de repositório
 │   │   ├── user.repository.interface.ts
 │   │   └── sync-log.repository.interface.ts
 │   └── services/                    # Interfaces de serviços externos
-│       ├── legacy-api.interface.ts  # ILegacyApiClient + LegacyUser
-│       ├── logger.interface.ts      # ILogger
+│       ├── legacy-api.interface.ts
+│       ├── logger.interface.ts
 │       └── index.ts
 ├── application/
 │   ├── services/
-│   │   ├── user.service.ts          # CRUD + CSV export
-│   │   ├── sync.service.ts          # Enfileiramento + cron
-│   │   └── health.service.ts        # Verificação componentes
+│   │   ├── user.service.ts
+│   │   ├── user.service.spec.ts     # ← Teste junto ao service
+│   │   ├── sync.service.ts
+│   │   ├── sync.service.spec.ts
+│   │   ├── health.service.ts
+│   │   └── health.service.spec.ts
 │   └── dtos/                        # DTOs com validação
 ├── infrastructure/
 │   ├── config/
-│   │   ├── env.validation.ts        # Validação env vars
+│   │   ├── env.validation.ts
 │   │   └── swagger.config.ts
 │   ├── database/
 │   │   ├── entities/                # Entidades ORM (TypeORM)
 │   │   │   ├── user.orm-entity.ts
 │   │   │   ├── sync-log.orm-entity.ts
 │   │   │   └── index.ts
-│   │   ├── mappers/                 # Data Mappers
-│   │   │   ├── user.mapper.ts
-│   │   │   ├── sync-log.mapper.ts
-│   │   │   └── index.ts
-│   │   └── typeorm-logger.ts
-│   ├── logger/
-│   │   ├── custom-logger.service.ts # Implementa ILogger
-│   │   └── logger.providers.ts      # Provider DI
-│   ├── repositories/                # Implementações TypeORM
+│   │   └── mappers/
+│   │       ├── user.mapper.ts
+│   │       ├── user.mapper.spec.ts  # ← Teste junto ao mapper
+│   │       ├── sync-log.mapper.ts
+│   │       ├── sync-log.mapper.spec.ts
+│   │       └── index.ts
+│   ├── logger/                      # Logging
+│   │   ├── custom-logger.service.ts # Logger NestJS (ConsoleLogger)
+│   │   ├── logger.providers.ts      # Provider para ILogger
+│   │   └── index.ts
+│   ├── repositories/
 │   │   ├── user.repository.ts
+│   │   ├── user.repository.spec.ts  # ← Testes de integração
 │   │   ├── sync-log.repository.ts
+│   │   ├── sync-log.repository.spec.ts
 │   │   └── index.ts
 │   ├── legacy/
-│   │   ├── legacy-api.client.ts     # Implementa ILegacyApiClient
-│   │   ├── legacy-api.providers.ts  # Provider DI
+│   │   ├── legacy-api.client.ts
+│   │   ├── legacy-api.client.spec.ts
 │   │   └── index.ts
-│   ├── resilience/                  # Retry, CircuitBreaker
-│   └── queue/                       # BullMQ processors
+│   ├── resilience/
+│   │   ├── retry.ts
+│   │   ├── retry.spec.ts
+│   │   ├── circuit-breaker.ts
+│   │   └── circuit-breaker.spec.ts
+│   └── queue/
+│       ├── sync.processor.ts
+│       ├── sync.processor.spec.ts
+│       ├── sync-batch.processor.ts
+│       ├── sync-batch.processor.spec.ts
+│       └── sync.constants.ts
 └── presentation/
-    ├── controllers/                 # REST endpoints
-    └── filters/                     # HttpExceptionFilter
+    ├── controllers/
+    │   ├── user.controller.ts
+    │   ├── user.controller.e2e-spec.ts  # ← E2E junto ao controller
+    │   ├── sync.controller.ts
+    │   └── health.controller.ts
+    ├── filters/
+    │   ├── http-exception.filter.ts
+    │   └── http-exception.filter.spec.ts
+    └── interceptors/
+        ├── logging.interceptor.ts       # Loga requests/responses
+        └── index.ts
 ```
+
+> **Padrão de Colocation:** Testes ficam junto aos arquivos que testam (`.spec.ts` ao lado do `.ts`).
+> Isso facilita encontrar e manter testes, padrão recomendado para Clean Architecture.
 
 ---
 
@@ -361,7 +393,7 @@ export class CreateUserDto {
 |---------|-----|
 | **Repository** | Abstração de persistência (`UserRepository`, `SyncLogRepository`) |
 | **Data Mapper** | Conversão Entity ↔ Model (`UserMapper`, `SyncLogMapper`) |
-| **Adapter** | `LegacyApiClientImpl` adapta API legada para interface interna |
+| **Adapter** | `AxiosLegacyApiClient` adapta API legada para interface interna |
 | **Dependency Injection** | NestJS providers com Symbol tokens |
 
 ### Injeção de Dependência
@@ -377,12 +409,10 @@ export interface ILogger {
 
 // 2. Implementar na infraestrutura
 @Injectable()
-export class LoggerService implements ILogger { ... }
+export class LoggerService extends ConsoleLogger implements ILogger { ... }
 
-// 3. Configurar provider
-export const loggerProviders: Provider[] = [
-  { provide: LOGGER_SERVICE, useClass: LoggerService }
-];
+// 3. Configurar via providers
+// loggerProviders exporta LOGGER_SERVICE
 
 // 4. Injetar via token
 constructor(
@@ -393,10 +423,79 @@ constructor(
 
 ---
 
-### Pendente
+## Testes
 
-- Testes unitários e de integração
-- `docs/OPTIMIZATIONS.md`
+### Cobertura Atual
+
+| Métrica | Meta | Atual |
+|---------|------|-------|
+| Statements | 80% | **94%+** |
+| Branches | 80% | **83%+** |
+| Functions | 80% | **98%+** |
+| Lines | 80% | **95%+** |
+| **Total de Testes** | 75+ | **294** |
+
+### Comandos de Teste
+
+```bash
+# Rodar todos os testes
+npm test
+
+# Testes com cobertura
+npm run test:cov
+
+# Testes em modo watch
+npm run test:watch
+
+# Testes para CI/CD
+npm run test:ci
+```
+
+### Estrutura de Testes (Colocation)
+
+Testes ficam junto aos arquivos fonte, não em pasta separada:
+
+| Tipo | Padrão | Exemplo |
+|------|--------|---------|
+| Unit | `*.spec.ts` | `user.service.spec.ts` |
+| E2E | `*.e2e-spec.ts` | `user.controller.e2e-spec.ts` |
+| Integration | `*.spec.ts` | `user.repository.spec.ts` |
+
+### Path Alias
+
+Imports usam `@/` como alias para `src/`:
+
+```typescript
+// ✅ Com alias (preferido)
+import { User } from '@/domain/models';
+import { UserRepository } from '@/domain/repositories/user.repository.interface';
+
+// ❌ Sem alias (evitar)
+import { User } from '../../../domain/models';
+```
+
+Configurado em `tsconfig.json` e `jest.config.js`.
+
+---
+
+## Logging
+
+O serviço usa o logger padrão do NestJS (`ConsoleLogger`) com implementação de `ILogger`:
+
+```typescript
+// Exemplo de uso
+this.logger.log('Fetching users', { page: 1, limit: 20 });
+this.logger.error('Failed to fetch', { error: errorMessage });
+```
+
+### LoggingInterceptor
+
+Interceptor global que loga requests e responses automaticamente:
+
+```
+[HTTP] Request  { method: 'POST', url: '/users', body: {...}, query: {...} }
+[HTTP] Response { method: 'POST', url: '/users', statusCode: 201, duration: '15ms', body: {...} }
+```
 
 ---
 
@@ -409,9 +508,14 @@ make dev
 # Local (requer Redis)
 docker run -d --name redis-local -p 6379:6379 redis:7-alpine
 npm run start:dev
-
-# Swagger: http://localhost:3000/api/docs
 ```
+
+### URLs
+
+| Serviço    | URL                           |
+| ---------- | ----------------------------- |
+| API        | http://localhost:3000         |
+| Swagger    | http://localhost:3000/api/docs|
 
 ### Comandos do Makefile
 

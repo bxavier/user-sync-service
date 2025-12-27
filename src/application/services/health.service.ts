@@ -1,52 +1,31 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import { DataSource } from 'typeorm';
-import axios from 'axios';
-import {
-  HealthStatus,
-  HealthResponseDto,
-  HealthDetailsResponseDto,
-  ComponentHealthDto,
-  QueueStatsDto,
-  LastSyncInfoDto,
-} from '../dtos/health-response.dto';
-import { SYNC_QUEUE_NAME, SYNC_BATCH_QUEUE_NAME } from '../../infrastructure/queue';
-import type { SyncJobData, SyncBatchJobData } from '../../infrastructure/queue';
-import { SYNC_LOG_REPOSITORY } from '../../domain/repositories/sync-log.repository.interface';
-import type { SyncLogRepository } from '../../domain/repositories/sync-log.repository.interface';
+import type { SyncJobData } from '@/infrastructure/queue';
+import { SYNC_QUEUE_NAME } from '@/infrastructure/queue';
+import { ComponentHealthDto, HealthResponseDto, HealthStatus } from '@/application/dtos/health-response.dto';
 
+/** Timeout in milliseconds for each health check component */
 const COMPONENT_TIMEOUT_MS = 3000;
-const APP_VERSION = '1.0.0';
 
+/**
+ * Health check service for liveness/readiness probes.
+ * Tests connectivity to critical components (database, Redis).
+ */
 @Injectable()
 export class HealthService {
-  private readonly startTime: number;
-  private readonly legacyApiUrl: string;
-
   constructor(
     private readonly dataSource: DataSource,
     private readonly configService: ConfigService,
     @InjectQueue(SYNC_QUEUE_NAME)
     private readonly syncQueue: Queue<SyncJobData>,
-    @InjectQueue(SYNC_BATCH_QUEUE_NAME)
-    private readonly batchQueue: Queue<SyncBatchJobData>,
-    @Inject(SYNC_LOG_REPOSITORY)
-    private readonly syncLogRepository: SyncLogRepository,
-  ) {
-    this.startTime = Date.now();
-    this.legacyApiUrl = this.configService.get<string>(
-      'LEGACY_API_URL',
-      'http://localhost:3001',
-    );
-  }
+  ) {}
 
+  /** Checks all components and returns aggregated health status. */
   async check(): Promise<HealthResponseDto> {
-    const [dbHealth, redisHealth] = await Promise.all([
-      this.checkDatabase(),
-      this.checkRedis(),
-    ]);
+    const [dbHealth, redisHealth] = await Promise.all([this.checkDatabase(), this.checkRedis()]);
 
     const status = this.determineOverallStatus([dbHealth, redisHealth]);
 
@@ -56,61 +35,11 @@ export class HealthService {
     };
   }
 
-  async checkDetails(): Promise<HealthDetailsResponseDto> {
-    const [dbHealth, redisHealth, legacyApiHealth, queueStats, lastSync] =
-      await Promise.all([
-        this.checkDatabase(),
-        this.checkRedis(),
-        this.checkLegacyApi(),
-        this.getQueueStats(),
-        this.getLastSync(),
-      ]);
-
-    const criticalComponents = [dbHealth, redisHealth];
-    const allComponents = [...criticalComponents, legacyApiHealth];
-
-    const status = this.determineOverallStatus(criticalComponents, allComponents);
-    const uptimeMs = Date.now() - this.startTime;
-    const memoryUsage = process.memoryUsage();
-    const cpuUsage = process.cpuUsage();
-
-    return {
-      status,
-      timestamp: new Date().toISOString(),
-      version: APP_VERSION,
-      uptime: Math.floor(uptimeMs / 1000),
-      uptimeFormatted: this.formatUptime(uptimeMs),
-      components: {
-        database: dbHealth,
-        redis: redisHealth,
-        legacyApi: legacyApiHealth,
-      },
-      system: {
-        memoryUsage: {
-          heapUsed: memoryUsage.heapUsed,
-          heapTotal: memoryUsage.heapTotal,
-          rss: memoryUsage.rss,
-          external: memoryUsage.external,
-        },
-        cpuUsage: {
-          user: cpuUsage.user,
-          system: cpuUsage.system,
-        },
-      },
-      sync: {
-        lastSync,
-        queueStats,
-      },
-    };
-  }
-
+  /** Checks SQLite database connectivity. */
   private async checkDatabase(): Promise<ComponentHealthDto> {
     const start = Date.now();
     try {
-      await Promise.race([
-        this.dataSource.query('SELECT 1'),
-        this.timeout(COMPONENT_TIMEOUT_MS),
-      ]);
+      await Promise.race([this.dataSource.query('SELECT 1'), this.timeout(COMPONENT_TIMEOUT_MS)]);
 
       const latencyMs = Date.now() - start;
       const databasePath = this.configService.get<string>('DATABASE_PATH');
@@ -132,6 +61,7 @@ export class HealthService {
     }
   }
 
+  /** Checks Redis connectivity via BullMQ queue client. */
   private async checkRedis(): Promise<ComponentHealthDto> {
     const start = Date.now();
     try {
@@ -160,99 +90,14 @@ export class HealthService {
     }
   }
 
-  private async checkLegacyApi(): Promise<ComponentHealthDto> {
-    const start = Date.now();
-    try {
-      await Promise.race([
-        axios.head(this.legacyApiUrl, { timeout: COMPONENT_TIMEOUT_MS }),
-        this.timeout(COMPONENT_TIMEOUT_MS),
-      ]);
-
-      const latencyMs = Date.now() - start;
-
-      return {
-        status: 'healthy',
-        latencyMs,
-        details: {
-          url: this.legacyApiUrl,
-        },
-      };
-    } catch (error) {
-      const latencyMs = Date.now() - start;
-
-      // API legada indisponível não é crítico, apenas degrada o status
-      return {
-        status: 'degraded',
-        latencyMs,
-        message: error instanceof Error ? error.message : 'Legacy API check failed',
-        details: {
-          url: this.legacyApiUrl,
-        },
-      };
-    }
-  }
-
-  private async getQueueStats(): Promise<QueueStatsDto> {
-    try {
-      const [syncCounts, batchCounts] = await Promise.all([
-        this.syncQueue.getJobCounts(),
-        this.batchQueue.getJobCounts(),
-      ]);
-
-      return {
-        waiting: syncCounts.waiting + batchCounts.waiting,
-        active: syncCounts.active + batchCounts.active,
-        completed: syncCounts.completed + batchCounts.completed,
-        failed: syncCounts.failed + batchCounts.failed,
-        delayed: syncCounts.delayed + batchCounts.delayed,
-      };
-    } catch {
-      return {
-        waiting: 0,
-        active: 0,
-        completed: 0,
-        failed: 0,
-        delayed: 0,
-      };
-    }
-  }
-
-  private async getLastSync(): Promise<LastSyncInfoDto | null> {
-    try {
-      const syncLog = await this.syncLogRepository.findLatest();
-
-      if (!syncLog) {
-        return null;
-      }
-
-      return {
-        id: syncLog.id!,
-        status: syncLog.status,
-        totalProcessed: syncLog.totalProcessed,
-        durationMs: syncLog.durationMs ?? undefined,
-        startedAt: syncLog.startedAt,
-        finishedAt: syncLog.finishedAt ?? undefined,
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  private determineOverallStatus(
-    criticalComponents: ComponentHealthDto[],
-    allComponents?: ComponentHealthDto[],
-  ): HealthStatus {
-    // Se algum componente crítico está unhealthy, retorna unhealthy
-    const hasUnhealthyCritical = criticalComponents.some(
-      (c) => c.status === 'unhealthy',
-    );
+  /** Aggregates component statuses into overall health status. */
+  private determineOverallStatus(criticalComponents: ComponentHealthDto[]): HealthStatus {
+    const hasUnhealthyCritical = criticalComponents.some((c) => c.status === 'unhealthy');
     if (hasUnhealthyCritical) {
       return 'unhealthy';
     }
 
-    // Se algum componente (crítico ou não) está degraded, retorna degraded
-    const componentsToCheck = allComponents || criticalComponents;
-    const hasDegraded = componentsToCheck.some((c) => c.status === 'degraded');
+    const hasDegraded = criticalComponents.some((c) => c.status === 'degraded');
     if (hasDegraded) {
       return 'degraded';
     }
@@ -260,15 +105,7 @@ export class HealthService {
     return 'healthy';
   }
 
-  private formatUptime(ms: number): string {
-    const s = Math.floor(ms / 1000);
-    const m = Math.floor(s / 60) % 60;
-    const h = Math.floor(s / 3600) % 24;
-    const d = Math.floor(s / 86400);
-    const parts = [d && `${d}d`, h && `${h}h`, m && `${m}m`].filter(Boolean);
-    return parts.length ? parts.join(' ') : `${s}s`;
-  }
-
+  /** Creates a promise that rejects after the specified timeout. */
   private timeout(ms: number): Promise<never> {
     return new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms));
   }

@@ -1,16 +1,14 @@
-import { User } from '../../../domain/models';
-import { UserEntity } from '../entities';
-import type { LegacyUser } from '../../../domain/services';
-import type { UpsertUserData } from '../../../domain/repositories';
+import { User } from '@/domain/models';
+import type { UpsertUserData } from '@/domain/repositories';
+import type { LegacyUser } from '@/domain/services';
+import { UserEntity } from '@/infrastructure/database/entities';
 
-/**
- * Data Mapper para User.
- * Centraliza conversões entre entidade ORM, modelo de domínio e dados externos.
- * Aplica o padrão Data Mapper e resolve violações de DRY.
- */
+/** Data Mapper: converts between ORM Entity, Domain Model, and Legacy format. */
 export class UserMapper {
   /**
-   * Converte entidade ORM para modelo de domínio
+   * Converts ORM entity to domain model.
+   * @param entity - TypeORM entity from database
+   * @returns Pure domain model instance
    */
   static toDomain(entity: UserEntity): User {
     return new User({
@@ -27,7 +25,9 @@ export class UserMapper {
   }
 
   /**
-   * Converte modelo de domínio para dados parciais de entidade ORM
+   * Converts domain model to partial ORM entity.
+   * @param model - Domain model instance
+   * @returns Partial entity data for persistence
    */
   static toEntity(model: User): Partial<UserEntity> {
     return {
@@ -41,7 +41,9 @@ export class UserMapper {
   }
 
   /**
-   * Converte dados do sistema legado para formato de upsert
+   * Converts legacy user to upsert format (string dates → Date objects).
+   * @param legacy - User data from legacy API
+   * @returns Data ready for bulk upsert
    */
   static fromLegacy(legacy: LegacyUser): UpsertUserData {
     return {
@@ -54,7 +56,9 @@ export class UserMapper {
   }
 
   /**
-   * Converte array de dados do sistema legado para formato de upsert
+   * Batch version of fromLegacy.
+   * @param legacyUsers - Array of users from legacy API
+   * @returns Array of data ready for bulk upsert
    */
   static fromLegacyBatch(legacyUsers: LegacyUser[]): UpsertUserData[] {
     return legacyUsers.map((user) => UserMapper.fromLegacy(user));

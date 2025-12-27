@@ -1,17 +1,12 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-} from 'typeorm';
-import { SyncStatus } from '../../../domain/models';
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { SyncStatus } from '@/domain/models';
 
 /**
- * Entidade ORM para SyncLog.
- * Contém decoradores TypeORM para mapeamento com banco de dados.
- * Separada do modelo de domínio para respeitar Separation of Concerns.
+ * ORM Entity for SyncLog.
+ * Contains TypeORM decorators for database mapping.
+ * Separated from domain model to respect Separation of Concerns.
  *
- * Nota: O enum SyncStatus e o método isInProgress() estão no modelo de domínio.
+ * Note: SyncStatus enum and isInProgress() method are in the domain model.
  */
 @Entity('sync_logs')
 export class SyncLogEntity {

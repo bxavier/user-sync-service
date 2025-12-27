@@ -1,14 +1,12 @@
-import { SyncLog } from '../../../domain/models';
-import { SyncLogEntity } from '../entities';
+import { SyncLog } from '@/domain/models';
+import { SyncLogEntity } from '@/infrastructure/database/entities';
 
-/**
- * Data Mapper para SyncLog.
- * Centraliza conversões entre entidade ORM e modelo de domínio.
- * Aplica o padrão Data Mapper e resolve violações de DRY.
- */
+/** Data Mapper: converts between ORM Entity and Domain Model. */
 export class SyncLogMapper {
   /**
-   * Converte entidade ORM para modelo de domínio
+   * Converts ORM entity to domain model.
+   * @param entity - TypeORM entity from database
+   * @returns Pure domain model instance
    */
   static toDomain(entity: SyncLogEntity): SyncLog {
     return new SyncLog({
@@ -23,7 +21,9 @@ export class SyncLogMapper {
   }
 
   /**
-   * Converte modelo de domínio para dados parciais de entidade ORM
+   * Converts domain model to partial ORM entity.
+   * @param model - Domain model instance
+   * @returns Partial entity data for persistence
    */
   static toEntity(model: SyncLog): Partial<SyncLogEntity> {
     return {

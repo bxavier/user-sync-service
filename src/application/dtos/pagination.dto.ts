@@ -4,19 +4,19 @@ import { IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class PaginationDto {
   @ApiPropertyOptional({
-    description: 'Número da página',
+    description: 'Page number',
     example: 1,
     default: 1,
     minimum: 1,
   })
   @IsOptional()
   @Type(() => Number)
-  @IsInt({ message: 'page deve ser um número inteiro' })
-  @Min(1, { message: 'page deve ser no mínimo 1' })
+  @IsInt({ message: 'page must be an integer' })
+  @Min(1, { message: 'page must be at least 1' })
   page?: number = 1;
 
   @ApiPropertyOptional({
-    description: 'Quantidade de itens por página',
+    description: 'Items per page',
     example: 10,
     default: 10,
     minimum: 1,
@@ -24,8 +24,8 @@ export class PaginationDto {
   })
   @IsOptional()
   @Type(() => Number)
-  @IsInt({ message: 'limit deve ser um número inteiro' })
-  @Min(1, { message: 'limit deve ser no mínimo 1' })
-  @Max(100, { message: 'limit deve ser no máximo 100' })
+  @IsInt({ message: 'limit must be an integer' })
+  @Min(1, { message: 'limit must be at least 1' })
+  @Max(100, { message: 'limit must be at most 100' })
   limit?: number = 10;
 }

@@ -7,6 +7,55 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+## [1.0.0] - 2025-12-27
+
+### Added
+- **Test Suite**: 294 tests with 94%+ coverage
+  - Unit tests for services, models, mappers, resilience
+  - Integration tests for repositories and legacy API client
+  - E2E tests for user endpoints
+- **AWS Architecture Documentation**: Complete guide for AWS deployment
+  - ECS Fargate Task for orchestrator
+  - SQS FIFO for batch processing
+  - Lambda workers for scalability
+- **README Improvements**:
+  - Badges (Node.js, NestJS, TypeScript, Coverage, Tests, License)
+  - Troubleshooting guide
+  - Complete curl examples for all endpoints
+
+### Changed
+- Updated `docs/AWS_ARCHITECTURE.md` with deployment guide
+- Checklist updated to reflect all implemented features
+
+---
+
+## [0.8.0] - 2025-12-26
+
+### Changed
+- **Clean Architecture with DIP**: Domain layer now defines abstract interfaces that infrastructure implements
+  - Domain models (`User`, `SyncLog`) are now pure classes without ORM decorators
+  - Repository interfaces use Symbol tokens for dependency injection
+  - Service interfaces (`ILogger`, `ILegacyApiClient`) abstract external dependencies
+- Infrastructure layer implements all concrete details:
+  - ORM entities (`UserEntity`, `SyncLogEntity`) with TypeORM decorators
+  - Data Mappers (`UserMapper`, `SyncLogMapper`) for Entity ↔ Model conversion
+  - `TypeOrmUserRepository` and `TypeOrmSyncLogRepository` implement domain interfaces
+  - `AxiosLegacyApiClient` implements `ILegacyApiClient`
+  - `LoggerService` implements `ILogger`
+- Simplified retry mechanism in queue processors
+- Added `SYNC_BATCH_CONCURRENCY` env var for batch queue worker configuration
+- Standardized all logs and documentation to English
+
+### Added
+- `domain/services/` with `ILogger` and `ILegacyApiClient` interfaces
+- `infrastructure/database/mappers/` with Data Mapper pattern
+- `infrastructure/database/entities/` for ORM-specific entities
+
+### Benefits
+- Domain is fully testable without database mocks
+- Easy to swap implementations (e.g., SQLite → PostgreSQL)
+- Low coupling between layers
+
 ## [0.7.4] - 2025-12-21
 
 ### Changed

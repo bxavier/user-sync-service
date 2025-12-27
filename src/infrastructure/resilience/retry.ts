@@ -1,5 +1,6 @@
-import type { ILogger } from '../../domain/services';
+import type { ILogger } from '@/domain/services';
 
+/** Configuration for retry behavior. */
 export interface RetryConfig {
   maxAttempts: number;
   initialDelayMs: number;
@@ -16,6 +17,7 @@ const DEFAULT_CONFIG: RetryConfig = {
   retryableErrors: [429, 500, 502, 503, 504],
 };
 
+/** Error thrown when all retry attempts have been exhausted. */
 export class RetryError extends Error {
   constructor(
     message: string,
@@ -27,6 +29,7 @@ export class RetryError extends Error {
   }
 }
 
+/** Executes a function with automatic retry and exponential backoff. */
 export async function withRetry<T>(
   fn: () => Promise<T>,
   config: Partial<RetryConfig> = {},
@@ -43,8 +46,8 @@ export async function withRetry<T>(
       lastError = error instanceof Error ? error : new Error(String(error));
 
       if (!isRetryableError(error, cfg.retryableErrors) || attempt === cfg.maxAttempts) {
-        logger?.error('Falha definitiva', { attempt, error: lastError.message });
-        throw new RetryError(`Falhou após ${attempt} tentativa(s)`, attempt, lastError);
+        logger?.error('Definitive failure', { attempt, error: lastError.message });
+        throw new RetryError(`Failed after ${attempt} attempt(s)`, attempt, lastError);
       }
 
       logger?.warn('Retry', { attempt, delay, error: lastError.message });
@@ -53,9 +56,10 @@ export async function withRetry<T>(
     }
   }
 
-  throw new RetryError(`Falhou após ${cfg.maxAttempts} tentativa(s)`, cfg.maxAttempts, lastError);
+  throw new RetryError(`Failed after ${cfg.maxAttempts} attempt(s)`, cfg.maxAttempts, lastError);
 }
 
+/** Checks if error is retryable (HTTP 429/5xx or network errors). */
 function isRetryableError(error: unknown, retryableCodes?: number[]): boolean {
   if (!retryableCodes) return true;
 

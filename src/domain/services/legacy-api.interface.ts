@@ -1,11 +1,11 @@
 /**
- * Token de injeção para o cliente da API legada.
- * Usado para inversão de dependência (DIP).
+ * Injection token for the legacy API client.
+ * Used for dependency inversion (DIP).
  */
 export const LEGACY_API_CLIENT = Symbol('LEGACY_API_CLIENT');
 
 /**
- * Representa um usuário retornado pela API legada.
+ * Represents a user returned by the legacy API.
  */
 export interface LegacyUser {
   id: number;
@@ -16,12 +16,12 @@ export interface LegacyUser {
 }
 
 /**
- * Callback executado para cada batch de usuários recebidos.
+ * Callback executed for each batch of received users.
  */
 export type BatchCallback = (users: LegacyUser[]) => Promise<void>;
 
 /**
- * Resultado do streaming de usuários.
+ * User streaming result.
  */
 export interface StreamingResult {
   totalProcessed: number;
@@ -29,13 +29,13 @@ export interface StreamingResult {
 }
 
 /**
- * Interface para o cliente da API legada.
- * Permite injeção de dependência e substituição em testes.
+ * Interface for the legacy API client.
+ * Allows dependency injection and substitution in tests.
  */
 export interface ILegacyApiClient {
   /**
-   * Busca usuários da API legada via streaming.
-   * Executa o callback para cada batch de usuários recebidos.
+   * Fetches users from the legacy API via streaming.
+   * Executes the callback for each batch of received users.
    */
   fetchUsersStreaming(onBatch: BatchCallback): Promise<StreamingResult>;
 }

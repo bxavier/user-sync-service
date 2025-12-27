@@ -3,22 +3,22 @@ import { IsEmail, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
 export class CreateUserDto {
   @ApiProperty({
-    description: 'Nome de usuário único',
+    description: 'Unique user name',
     example: 'john_doe',
     maxLength: 50,
   })
-  @IsNotEmpty({ message: 'userName é obrigatório' })
-  @IsString({ message: 'userName deve ser uma string' })
-  @MaxLength(50, { message: 'userName deve ter no máximo 50 caracteres' })
+  @IsNotEmpty({ message: 'userName is required' })
+  @IsString({ message: 'userName must be a string' })
+  @MaxLength(50, { message: 'userName must have at most 50 characters' })
   userName: string;
 
   @ApiProperty({
-    description: 'Email do usuário',
+    description: 'User email',
     example: 'john@example.com',
     maxLength: 255,
   })
-  @IsNotEmpty({ message: 'email é obrigatório' })
-  @IsEmail({}, { message: 'email deve ser um email válido' })
-  @MaxLength(255, { message: 'email deve ter no máximo 255 caracteres' })
+  @IsNotEmpty({ message: 'email is required' })
+  @IsEmail({}, { message: 'email must be a valid email' })
+  @MaxLength(255, { message: 'email must have at most 255 characters' })
   email: string;
 }

@@ -2,20 +2,21 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
+import type { UserRepository } from '@/domain/repositories/user.repository.interface';
+import { USER_REPOSITORY } from '@/domain/repositories/user.repository.interface';
+import type { ILogger, LegacyUser } from '@/domain/services';
+import { LOGGER_SERVICE } from '@/domain/services';
+import { UserMapper } from '@/infrastructure/database/mappers';
 import { SYNC_BATCH_QUEUE_NAME } from './sync.constants';
-import { USER_REPOSITORY } from '../../domain/repositories/user.repository.interface';
-import type { UserRepository } from '../../domain/repositories/user.repository.interface';
-import { LOGGER_SERVICE } from '../../domain/services';
-import type { ILogger } from '../../domain/services';
-import { UserMapper } from '../database/mappers';
-import type { LegacyUser } from '../../domain/services';
 
+/** Data passed to each batch processing job */
 export interface SyncBatchJobData {
   syncLogId: number;
   batchNumber: number;
   users: LegacyUser[];
 }
 
+/** Result returned by each batch processing job */
 export interface SyncBatchJobResult {
   syncLogId: number;
   batchNumber: number;
@@ -23,6 +24,10 @@ export interface SyncBatchJobResult {
   durationMs: number;
 }
 
+/**
+ * Batch worker - converts legacy users and performs bulk upsert.
+ * Runs with configurable concurrency for parallel processing.
+ */
 @Processor(SYNC_BATCH_QUEUE_NAME)
 export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
   constructor(
@@ -35,20 +40,19 @@ export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
     super();
   }
 
+  /** Configures worker concurrency on startup. */
   onModuleInit() {
-    const concurrency = this.configService.get<number>(
-      'SYNC_BATCH_CONCURRENCY',
-      5,
-    );
+    const concurrency = this.configService.get<number>('SYNC_BATCH_CONCURRENCY', 5);
     this.worker.concurrency = concurrency;
-    this.logger.log(`Batch processor configurado com concurrency: ${concurrency}`);
+    this.logger.log(`Batch processor configured with concurrency: ${concurrency}`);
   }
 
+  /** Processes a single batch - converts legacy format and bulk upserts. */
   async process(job: Job<SyncBatchJobData>): Promise<SyncBatchJobResult> {
     const { syncLogId, batchNumber, users } = job.data;
     const startTime = Date.now();
 
-    this.logger.log('Processando batch', {
+    this.logger.log('Processing batch', {
       syncLogId,
       batchNumber,
       usersCount: users.length,
@@ -56,14 +60,14 @@ export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
     });
 
     try {
-      // Usa o UserMapper para converter dados do legado (DRY)
+      // Uses UserMapper to convert legacy data (DRY)
       const upsertData = UserMapper.fromLegacyBatch(users);
 
       await this.userRepository.bulkUpsertByUserName(upsertData);
 
       const durationMs = Date.now() - startTime;
 
-      this.logger.log('Batch processado com sucesso', {
+      this.logger.log('Batch processed successfully', {
         syncLogId,
         batchNumber,
         processedCount: users.length,
@@ -77,10 +81,9 @@ export class SyncBatchProcessor extends WorkerHost implements OnModuleInit {
         durationMs,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-      this.logger.error('Erro ao processar batch', {
+      this.logger.error('Error processing batch', {
         syncLogId,
         batchNumber,
         error: errorMessage,
